@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AeroStream // Mobile Screen Live Receiver</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #06080d;
+    }
+    .reverse-header {
+      position: absolute;
+      top: 16px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+    }
+    .reverse-card {
+      width: 90vw;
+      height: 85vh;
+      max-width: 1200px;
+      border: 1px solid var(--border-glow);
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(10, 14, 22, 0.8);
+      box-shadow: 0 0 40px rgba(0, 240, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    #mobile-canvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+    .waiting-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      color: var(--text-muted);
+      font-family: var(--font-display);
+    }
+  </style>
+</head>
+<body>
+  <div class="reverse-header">
+    <div class="brand-logo">
+      <span class="logo-icon">⚡</span>
+      <span class="logo-text">AERO<span class="highlight">STREAM</span> &gt; MOBILE RECEIVER</span>
+    </div>
+    <div class="hud-center">
+      <div class="stat-pill"><span class="label">MOBILE STREAM</span><span class="val neon-emerald" id="stream-status">WAITING...</span></div>
+    </div>
+  </div>
+
+  <div class="reverse-card">
+    <div id="waiting-prompt" class="waiting-box">
+      <div class="spinner"></div>
+      <p>WAITING FOR PHONE TO BROADCAST SCREEN...</p>
+      <span style="font-size: 12px; font-family: var(--font-body); color: var(--text-muted)">
+        On your mobile device, tap "Share Phone" or "Start Screen Broadcast"
+      </span>
+    </div>
+    <canvas id="mobile-canvas" style="display: none;"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('mobile-canvas');
+    const ctx = canvas.getContext('2d');
+    const waitingPrompt = document.getElementById('waiting-prompt');
+    const streamStatus = document.getElementById('stream-status');
+
+    const params = new URLSearchParams(window.location.search);
+    const pin = params.get('pin') || '123456';
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws?pin=${encodeURIComponent(pin)}&role=receiver`);
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      console.log('Mobile receiver connected');
+    };
+
+    ws.onmessage = async (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        const bytes = new Uint8Array(event.data);
+        // Check reverse marker (0xFE, 0xFE)
+        if (bytes.length > 2 && bytes[0] === 0xFE && bytes[1] === 0xFE) {
+          waitingPrompt.style.display = 'none';
+          canvas.style.display = 'block';
+          streamStatus.textContent = 'RECEIVING LIVE';
+          streamStatus.classList.remove('neon-cyan');
+          streamStatus.classList.add('neon-emerald');
+
+          const jpegBytes = bytes.subarray(2);
+          const blob = new Blob([jpegBytes], { type: 'image/jpeg' });
+          try {
+            const bitmap = await createImageBitmap(blob);
+            if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+              canvas.width = bitmap.width;
+              canvas.height = bitmap.height;
+            }
+            ctx.drawImage(bitmap, 0, 0);
+            bitmap.close();
+          } catch(e) {}
+        }
+      }
+    };
+
+    ws.onclose = () => {
+      streamStatus.textContent = 'DISCONNECTED';
+      streamStatus.classList.remove('neon-emerald');
+      streamStatus.style.color = '#ff0055';
+    };
+  </script>
+</body>
+</html>

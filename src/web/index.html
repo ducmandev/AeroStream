@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#090d16">
+  <title>AeroStream Remote Desktop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- PIN Auth Modal -->
+  <div id="auth-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="brand-header">
+        <div class="brand-logo">
+          <span class="logo-badge">⚡</span>
+          <span class="logo-text">Aero<span class="brand-accent">Stream</span></span>
+        </div>
+        <p class="brand-subtitle">Ultra-low latency Remote Desktop</p>
+      </div>
+
+      <div class="auth-body">
+        <label for="pin-input" class="auth-label">Enter 6-digit Host PIN</label>
+        <div class="pin-input-wrap">
+          <input type="password" id="pin-input" maxlength="6" inputmode="numeric" placeholder="● ● ● ● ● ●" autofocus autocomplete="off">
+        </div>
+        <div class="auth-options">
+          <label class="remember-checkbox">
+            <input type="checkbox" id="remember-pin" checked>
+            <span>Remember on this device</span>
+          </label>
+        </div>
+        <button id="btn-connect" class="btn-primary">
+          <span>Connect to PC</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <div id="auth-error" class="error-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Streaming App -->
+  <div id="app-container">
+    <!-- Stream Canvas (100% Fullscreen Viewport) -->
+    <div id="canvas-wrapper">
+      <video id="webrtc-video" autoplay playsinline></video>
+      <canvas id="stream-canvas"></canvas>
+      <div id="cursor-overlay" class="cursor-pointer hidden"></div>
+      
+      <div id="lock-banner" class="lock-banner hidden">
+        <span class="lock-icon">🔒</span>
+        <span class="lock-text">Host desktop is locked — View only (UIPI blocks remote input)</span>
+      </div>
+
+      <div id="connection-overlay" class="state-overlay">
+        <div class="spinner"></div>
+        <div class="state-text">Connecting to remote desktop...</div>
+      </div>
+    </div>
+
+    <!-- Floating Dynamic Island (Auto-Hides after 3s of idle) -->
+    <div id="dynamic-island" class="dynamic-island" title="Hover or tap to expand controls">
+      <div class="island-notch"></div>
+      <div class="island-body">
+        <div class="island-left">
+          <div class="status-pulse-dot" id="island-status-dot" title="Connected & Streaming"></div>
+          <span class="island-brand">Aero<span class="brand-accent">Stream</span></span>
+          <div class="island-stats-pill">
+            <span class="stat-item stat-emerald" id="stat-latency">-- ms</span>
+            <span class="stat-sep">•</span>
+            <span class="stat-item" id="stat-fps">-- fps</span>
+            <span class="stat-sep">•</span>
+            <span class="stat-badge" id="hud-resolution">1080p</span>
+            <span class="stat-item stat-dim" id="stat-bitrate" style="display:none;">-- Mbps</span>
+          </div>
+        </div>
+
+        <div class="island-right">
+          <!-- Audio Toggle -->
+          <button id="btn-audio-mute" class="tool-btn" title="Toggle Audio (Mute/Unmute)">
+            <svg id="svg-audio-on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            <svg id="svg-audio-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hidden"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+          </button>
+
+          <!-- Quick Shortcuts & Keys Menu Toggle -->
+          <button id="btn-shortcuts-toggle" class="tool-btn" title="Quick Keys & Shortcuts (Win, Ctrl+Alt+Del, Esc)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></svg>
+          </button>
+
+          <!-- Touch / Mouse Mode Toggle -->
+          <button id="btn-touch-mode" class="tool-btn" title="Toggle Direct Touch / Virtual Trackpad">
+            <svg id="svg-touch-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          </button>
+
+          <!-- Settings Toggle -->
+          <button id="btn-settings-toggle" class="tool-btn" title="Stream Settings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+
+          <!-- Fullscreen Toggle -->
+          <button id="btn-fullscreen" class="tool-btn" title="Toggle Fullscreen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Shortcuts Popover (Non-blocking Mini Menu) -->
+    <div id="shortcuts-panel" class="shortcuts-card hidden">
+      <div class="shortcuts-header">
+        <span class="shortcuts-title">⚡ Quick Keys & Actions</span>
+        <button id="btn-close-shortcuts" class="btn-close-sm">&times;</button>
+      </div>
+      <div class="shortcuts-grid">
+        <button id="tb-win-key" class="shortcut-btn" title="Press Windows Start Key">
+          <span class="key-icon">⊞</span>
+          <span>Win</span>
+        </button>
+        <button id="tb-esc-key" class="shortcut-btn" title="Press Escape">
+          <span class="key-icon">⎋</span>
+          <span>Esc</span>
+        </button>
+        <button id="btn-ctrl-alt-del" class="shortcut-btn" title="Send Ctrl+Alt+Del">
+          <span class="key-icon">🔒</span>
+          <span>Ctrl+Alt+Del</span>
+        </button>
+        <button id="btn-alt-tab" class="shortcut-btn" title="Send Alt+Tab">
+          <span class="key-icon">⇥</span>
+          <span>Alt+Tab</span>
+        </button>
+        <button id="btn-taskmgr" class="shortcut-btn" title="Open Task Manager">
+          <span class="key-icon">📊</span>
+          <span>Taskmgr</span>
+        </button>
+        <button id="tb-keyboard" class="shortcut-btn btn-highlight" title="Show Virtual Keyboard">
+          <span class="key-icon">⌨</span>
+          <span>Keyboard</span>
+        </button>
+      </div>
+      <div class="shortcuts-mouse-bar">
+        <span class="section-label">Mouse Assist:</span>
+        <div class="mouse-actions">
+          <button id="tb-left-click" class="mouse-btn">Left Click</button>
+          <button id="tb-right-click" class="mouse-btn">Right Click</button>
+          <button id="btn-double-click" class="mouse-btn">Double Click</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden Input for Virtual Mobile Keyboard -->
+    <input type="text" id="hidden-keyboard-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+    <!-- Quality Settings Drawer -->
+    <div id="settings-panel" class="settings-modal hidden">
+      <div class="settings-header">
+        <div class="settings-title-wrap">
+          <span class="settings-icon">⚙️</span>
+          <h3>Stream Preferences</h3>
+        </div>
+        <button id="btn-close-settings" class="btn-close-x">&times;</button>
+      </div>
+      <div class="settings-body">
+        <div class="setting-row">
+          <label>Bandwidth & Quality Preset</label>
+          <div class="pill-group" id="mode-pills">
+            <button class="pill-btn" data-mode="eco">⚡ Eco (1.5M)</button>
+            <button class="pill-btn active" data-mode="balanced">🎯 Balanced (720p)</button>
+            <button class="pill-btn" data-mode="quality">💎 Quality (1080p)</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <label>Target Framerate</label>
+          <div class="pill-group" id="fps-pills">
+            <button class="pill-btn active" data-fps="60">60 FPS</button>
+            <button class="pill-btn" data-fps="30">30 FPS</button>
+            <button class="pill-btn" data-fps="15">15 FPS</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <label>Stream Resolution</label>
+          <div class="pill-group" id="res-pills">
+            <button class="pill-btn active" data-res="720">720p (Fast)</button>
+            <button class="pill-btn" data-res="1080">1080p (Native)</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <label for="setting-quality">Image Quality: <span id="quality-val" class="text-blue">80%</span></label>
+          <input type="range" id="setting-quality" min="40" max="95" value="80" step="5">
+          <div class="slider-labels">
+            <span>Bandwidth Saver</span>
+            <span>Ultra Crisp</span>
+          </div>
+        </div>
+
+        <div class="setting-row info-box">
+          <div class="info-title">💡 Touch Gestures Guide:</div>
+          <ul class="gesture-list">
+            <li><strong>Swipe 1 finger:</strong> Move mouse cursor</li>
+            <li><strong>Tap 1 finger:</strong> Left-click at position</li>
+            <li><strong>Tap 2 fingers:</strong> Right-click at position</li>
+            <li><strong>Drag 2 fingers:</strong> Scroll page up/down</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

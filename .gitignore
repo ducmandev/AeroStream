@@ -1,0 +1,40 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+*.ilk
+
+# Binary releases & packaged artifacts
+*.exe
+!*.manifest
+*.dll
+*.apk
+*.zip
+/AeroStream-Windows/
+
+# Logs
+*.log
+crash_*.log
+
+# TLS / Certificates & Keys
+*.pem
+*.crt
+*.key
+*.pfx
+
+# Flutter & Android
+**/build/
+**/.gradle/
+**/local.properties
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/.pub/
+
+# IDE & OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

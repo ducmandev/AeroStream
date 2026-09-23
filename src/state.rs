@@ -37,6 +37,7 @@ pub struct AppState {
     pub server_start_time: std::time::Instant,
     pub failed_pin_attempts: Arc<Mutex<HashMap<IpAddr, (u32, Instant)>>>,
     pub active_tokens: Arc<RwLock<HashMap<String, SessionToken>>>,
+    pub session_broker: Arc<crate::session_broker::SessionBroker>,
 }
 
 impl AppState {
@@ -52,6 +53,7 @@ impl AppState {
         let (audio_sender, _) = broadcast::channel(64);
         let (reverse_frame_sender, _) = broadcast::channel(2);
         let stream_settings = Arc::new(DynamicStreamSettings::new(config.fps, config.quality));
+        let session_broker = Arc::new(crate::session_broker::SessionBroker::new());
 
         Self {
             config: Arc::new(config),
@@ -70,6 +72,7 @@ impl AppState {
             server_start_time: std::time::Instant::now(),
             failed_pin_attempts: Arc::new(Mutex::new(HashMap::new())),
             active_tokens: Arc::new(RwLock::new(HashMap::new())),
+            session_broker,
         }
     }
 

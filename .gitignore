@@ -22,6 +22,10 @@ crash_*.log
 *.key
 *.pfx
 
+# Secrets — DPAPI session credentials (Phase 6 Session mode)
+/data/
+aerostream-session-creds*
+
 # Flutter & Android
 **/build/
 **/.gradle/

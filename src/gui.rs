@@ -10,6 +10,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 const ID_BTN_OPEN_BROWSER: isize = 101;
 const ID_BTN_COPY_LINK: isize = 102;
 const ID_BTN_EXIT: isize = 103;
+const ID_BTN_TEST_AGENT: isize = 104;
 
 const SS_CENTER: u32 = 0x00000001;
 const BS_PUSHBUTTON: u32 = 0x00000000;
@@ -63,7 +64,7 @@ pub fn run_gui(
 
         // Center on screen
         let win_w = 480;
-        let win_h = 400;
+        let win_h = 445;
         let screen_cx = GetSystemMetrics(SM_CXSCREEN);
         let screen_cy = GetSystemMetrics(SM_CYSCREEN);
         let pos_x = (screen_cx - win_w) / 2;
@@ -170,6 +171,17 @@ pub fn run_gui(
             hwnd, ID_BTN_COPY_LINK as HMENU, hinstance, null_mut(),
         );
 
+        // Button: Test Secure Agent (SYSTEM Proof)
+        let btn4_text = to_wstring("Test Secure Agent (SYSTEM Proof)");
+        CreateWindowExW(
+            0,
+            btn_cls.as_ptr(),
+            btn4_text.as_ptr(),
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            50, 296, 360, 34,
+            hwnd, ID_BTN_TEST_AGENT as HMENU, hinstance, null_mut(),
+        );
+
         // Button: Exit
         let btn3_text = to_wstring("Stop & Close Server");
         CreateWindowExW(
@@ -177,7 +189,7 @@ pub fn run_gui(
             btn_cls.as_ptr(),
             btn3_text.as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            50, 296, 360, 34,
+            50, 338, 360, 34,
             hwnd, ID_BTN_EXIT as HMENU, hinstance, null_mut(),
         );
 
@@ -229,6 +241,33 @@ unsafe extern "system" fn wnd_proc(
                         let caption = to_wstring("AeroStream");
                         MessageBoxW(hwnd, msg_text.as_ptr(), caption.as_ptr(), MB_OK | MB_ICONINFORMATION);
                     }
+                }
+                ID_BTN_TEST_AGENT => {
+                    let hwnd_val = hwnd as isize;
+                    std::thread::spawn(move || {
+                        let h = hwnd_val as HWND;
+                        match crate::secure_agent::spawn_secure_agent() {
+                            Ok(sess) => {
+                                let msg = format!(
+                                    "Secure agent spawned successfully as SYSTEM in session {}!\n\nProof file: C:\\Windows\\Temp\\aerostream-agent-proof.txt\nService AeroStreamSecureHelper deleted cleanly.",
+                                    sess
+                                );
+                                let w_title = to_wstring("AeroStream - Secure Agent OK");
+                                let w_msg = to_wstring(&msg);
+                                unsafe {
+                                    MessageBoxW(h, w_msg.as_ptr(), w_title.as_ptr(), MB_OK | MB_ICONINFORMATION);
+                                }
+                            }
+                            Err(e) => {
+                                let msg = format!("Failed to spawn secure agent:\n\n{}", e);
+                                let w_title = to_wstring("AeroStream - Secure Agent Error");
+                                let w_msg = to_wstring(&msg);
+                                unsafe {
+                                    MessageBoxW(h, w_msg.as_ptr(), w_title.as_ptr(), MB_OK | MB_ICONWARNING);
+                                }
+                            }
+                        }
+                    });
                 }
                 ID_BTN_EXIT => {
                     DestroyWindow(hwnd);

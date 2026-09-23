@@ -241,10 +241,20 @@ impl CaptureEngine {
                     let lock_msg = format!("{{\"type\":\"lock_status\",\"locked\":{}}}", is_locked);
                     let _ = cursor_sender.send(lock_msg);
                     if is_locked {
-                        info!("Host desktop is locked (UIPI active). Remote mouse/keyboard inputs are blocked by Windows OS security.");
+                        info!("Host desktop is locked (Winlogon/LogonUI active). InputManager attached to input desktop for remote password unlock.");
                     } else {
-                        info!("Host desktop unlocked. Remote mouse/keyboard inputs enabled.");
+                        info!("Host desktop unlocked. Normal interactive desktop active.");
                     }
+                    // Swing this capture thread onto the active desktop (Winlogon when locked,
+                    // Default when unlocked) so GDI capture sees the lock screen instead of a gray frame.
+                    unsafe {
+                        let attached = crate::input::InputManager::attach_input_desktop();
+                        info!("[Lock Transition] Capture thread desktop attach (locked={}): {}", is_locked, attached);
+                    }
+                    // GDI DCs are bound to the desktop they were created on — force recreation
+                    // on the next pass so BitBlt targets the new desktop.
+                    current_target_w = 0;
+                    current_target_h = 0;
                 }
             }
 
@@ -690,8 +700,54 @@ impl CaptureEngine {
         false
     }
 
-    /// Checks whether the interactive Windows desktop is currently locked (Winlogon / LogonUI active)
+    /// Checks whether the interactive Windows desktop is currently locked (Winlogon / LogonUI active).
+    /// Primary signal: LogonUI.exe running in our session — immune to the NULL-DACL side effect
+    /// (after we widen the Winlogon desktop DACL for secure-desktop capture, OpenInputDesktop
+    /// succeeds even while locked, which made the legacy heuristic report "unlocked").
     pub fn check_is_desktop_locked() -> bool {
+        unsafe {
+            let mut session_id = 0u32;
+            let our_pid = windows_sys::Win32::System::Threading::GetCurrentProcessId();
+            if windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId(our_pid, &mut session_id) == 0 {
+                // Could not resolve our session — fall back to the console session.
+                session_id = windows_sys::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId();
+            }
+
+            let mut p_proc_info: *mut windows_sys::Win32::System::RemoteDesktop::WTS_PROCESS_INFOW = std::ptr::null_mut();
+            let mut count: u32 = 0;
+            let mut logonui_found = false;
+            if windows_sys::Win32::System::RemoteDesktop::WTSEnumerateProcessesW(
+                windows_sys::Win32::System::RemoteDesktop::WTS_CURRENT_SERVER_HANDLE,
+                0,
+                1,
+                &mut p_proc_info,
+                &mut count,
+            ) != 0 && !p_proc_info.is_null()
+            {
+                let procs = std::slice::from_raw_parts(p_proc_info, count as usize);
+                for p in procs {
+                    if p.SessionId == session_id && !p.pProcessName.is_null() {
+                        let mut len = 0usize;
+                        let name_ptr = p.pProcessName as *const u16;
+                        while *name_ptr.add(len) != 0 {
+                            len += 1;
+                        }
+                        let name = String::from_utf16_lossy(std::slice::from_raw_parts(p.pProcessName as *const u16, len));
+                        if name.eq_ignore_ascii_case("logonui.exe") {
+                            logonui_found = true;
+                            break;
+                        }
+                    }
+                }
+                windows_sys::Win32::System::RemoteDesktop::WTSFreeMemory(p_proc_info as _);
+            }
+            if logonui_found {
+                return true;
+            }
+        }
+
+        // Fallback: legacy desktop-handle heuristic (used before LogonUI appears, e.g. very
+        // early during the lock transition, or on systems where LogonUI is suppressed).
         unsafe {
             // DESKTOP_READOBJECTS = 0x0001
             let desk = OpenInputDesktop(0, 0, 0x0001);

@@ -1,0 +1,1972 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AeroStream Mobile — Interactive UI/UX Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #080C14;
+      --surface-dark: #0F172A;
+      --card-dark: rgba(30, 41, 59, 0.7);
+      --border-dark: rgba(255, 255, 255, 0.08);
+      --accent: #0284C7;
+      --accent-glow: #38BDF8;
+      --accent-gradient: linear-gradient(135deg, #0284C7 0%, #0EA5E9 50%, #38BDF8 100%);
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --phone-w: 390px;
+      --phone-h: 820px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #050811;
+      background-image: 
+        radial-gradient(circle at 20% 15%, rgba(2, 132, 199, 0.15) 0%, transparent 40%),
+        radial-gradient(circle at 80% 85%, rgba(56, 189, 248, 0.1) 0%, transparent 40%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 60px;
+      overflow-x: hidden;
+    }
+
+    /* TOP REVIEW TOOLBAR */
+    .review-toolbar {
+      width: 100%;
+      max-width: 1100px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-dark);
+      border-radius: 20px;
+      padding: 14px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+      position: sticky;
+      top: 16px;
+      z-index: 100;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(14, 165, 233, 0.4);
+    }
+
+    .brand-text h1 {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      background: linear-gradient(135deg, #FFF 60%, var(--accent-glow));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-text p {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .nav-pills {
+      display: flex;
+      background: rgba(30, 41, 59, 0.6);
+      padding: 4px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      gap: 4px;
+    }
+
+    .nav-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-btn:hover {
+      color: #FFF;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .nav-btn.active {
+      background: var(--accent);
+      color: #FFF;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+    }
+
+    .controls-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ctrl-pill {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--border-dark);
+      padding: 6px 14px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .ctrl-pill:hover, .ctrl-pill.active {
+      color: #FFF;
+      border-color: var(--accent-glow);
+      background: rgba(2, 132, 199, 0.15);
+    }
+
+    /* MAIN PROTOTYPE STAGE */
+    .stage-container {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 40px;
+      width: 100%;
+      max-width: 1100px;
+    }
+
+    /* SMARTPHONE DEVICE FRAME */
+    .phone-wrapper {
+      position: relative;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .phone-wrapper.landscape {
+      --phone-w: 780px;
+      --phone-h: 420px;
+    }
+
+    .phone-frame {
+      width: var(--phone-w);
+      height: var(--phone-h);
+      background: #000;
+      border-radius: 48px;
+      border: 10px solid #1E293B;
+      box-shadow: 
+        0 0 0 2px rgba(255, 255, 255, 0.1),
+        0 30px 60px -12px rgba(0, 0, 0, 0.8),
+        0 0 40px rgba(14, 165, 233, 0.15);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* DYNAMIC ISLAND & PUNCH HOLE */
+    .island-container {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 90;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dynamic-island {
+      height: 28px;
+      background: #000;
+      border-radius: 20px;
+      padding: 4px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .dynamic-island:hover {
+      transform: scale(1.03);
+    }
+
+    .island-cam {
+      width: 10px;
+      height: 10px;
+      background: #0a0f1d;
+      border-radius: 50%;
+      border: 1.5px solid #1e293b;
+    }
+
+    .island-pill-badge {
+      font-size: 10px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: #38BDF8;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .island-pulse {
+      width: 6px;
+      height: 6px;
+      background: #10B981;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    /* STATUS BAR */
+    .status-bar {
+      height: 44px;
+      padding: 12px 24px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 700;
+      color: #FFF;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+
+    /* PHONE SCREEN CONTENT CONTAINER */
+    .screen-viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-dark);
+    }
+
+    .view-panel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      opacity: 0;
+      transform: scale(0.97);
+      transition: opacity 0.3s, transform 0.3s;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-bottom: 24px;
+    }
+
+    .view-panel.active {
+      display: flex;
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* HOME / CONNECT SCREEN STYLING */
+    .connect-screen {
+      padding: 16px 20px 24px;
+      gap: 18px;
+    }
+
+    .header-profile {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .app-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .app-logo-badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 16px;
+      color: #FFF;
+    }
+
+    .app-title-group h2 {
+      font-size: 16px;
+      font-weight: 800;
+      color: #FFF;
+    }
+
+    .app-title-group span {
+      font-size: 11px;
+      color: var(--accent-glow);
+      font-weight: 600;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    /* HOST RADAR HERO CARD */
+    .radar-card {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.5) 100%);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 24px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 12px 28px -8px rgba(2, 132, 199, 0.25);
+    }
+
+    .radar-card::before {
+      content: '';
+      position: absolute;
+      top: -40px;
+      right: -40px;
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .radar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .live-status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #34D399;
+    }
+
+    .host-info-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .pc-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      background: rgba(2, 132, 199, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-glow);
+    }
+
+    .pc-details h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #FFF;
+      margin-bottom: 3px;
+    }
+
+    .pc-details p {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      margin-bottom: 16px;
+    }
+
+    .metric-item {
+      text-align: center;
+    }
+
+    .metric-item .val {
+      font-size: 13px;
+      font-weight: 700;
+      color: #FFF;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .metric-item .lbl {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .btn-connect-hero {
+      width: 100%;
+      background: var(--accent-gradient);
+      border: none;
+      padding: 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #FFF;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 8px 24px rgba(2, 132, 199, 0.4);
+      transition: all 0.2s;
+    }
+
+    .btn-connect-hero:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(2, 132, 199, 0.5);
+    }
+
+    /* MODE SELECTOR PILL */
+    .mode-tabs {
+      display: flex;
+      background: rgba(30, 41, 59, 0.5);
+      padding: 4px;
+      border-radius: 14px;
+      border: 1px solid var(--border-dark);
+      margin-top: 4px;
+    }
+
+    .mode-tab-btn {
+      flex: 1;
+      padding: 8px;
+      text-align: center;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-tab-btn.active {
+      background: rgba(2, 132, 199, 0.25);
+      color: #38BDF8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    /* MANUAL CONNECTION CARD */
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .custom-card {
+      background: var(--card-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: 20px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .input-field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .input-control {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: #FFF;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+      transition: border 0.2s;
+    }
+
+    .input-control:focus {
+      border-color: var(--accent-glow);
+    }
+
+    /* PIN BOXES PREVIEW */
+    .pin-boxes-row {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .pin-box {
+      flex: 1;
+      height: 44px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: #38BDF8;
+    }
+
+    .pin-box.filled {
+      border-color: rgba(56, 189, 248, 0.5);
+      background: rgba(2, 132, 199, 0.15);
+    }
+
+    /* RECENT CONNECTIONS LIST */
+    .recent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .recent-item {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-dark);
+      border-radius: 16px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .recent-item:hover {
+      background: rgba(30, 41, 59, 0.6);
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+
+    .recent-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .recent-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10B981;
+    }
+
+    .recent-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFF;
+    }
+
+    .recent-ip {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* =================================================== */
+    /* SCREEN 2: REMOTE STREAM & WINDOWS DESKTOP SIMULATOR */
+    /* =================================================== */
+    .stream-viewport {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* SIMULATED WINDOWS 11 DESKTOP */
+    .win-desktop {
+      flex: 1;
+      width: 100%;
+      position: relative;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><defs><radialGradient id="g1" cx="60%" cy="40%" r="60%"><stop offset="0%" stop-color="%230b5394"/><stop offset="50%" stop-color="%23082567"/><stop offset="100%" stop-color="%23030b1e"/></radialGradient></defs><rect width="1920" height="1080" fill="url(%23g1)"/><path d="M400,600 Q700,300 1100,550 T1700,400" fill="none" stroke="%2338bdf8" stroke-width="60" opacity="0.3" filter="blur(40px)"/><path d="M200,750 Q600,450 1200,650 T1800,500" fill="none" stroke="%230284c7" stroke-width="90" opacity="0.4" filter="blur(60px)"/></svg>') center/cover no-repeat;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* LOCK SCREEN WALLPAPER WHEN LOCKED */
+    .win-desktop.locked {
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><defs><radialGradient id="gl" cx="50%" cy="50%" r="70%"><stop offset="0%" stop-color="%233b1e54"/><stop offset="70%" stop-color="%230c0714"/><stop offset="100%" stop-color="%2305020a"/></radialGradient></defs><rect width="1920" height="1080" fill="url(%23gl)"/></svg>') center/cover no-repeat;
+    }
+
+    /* LOCK SCREEN OVERLAY ON DESKTOP */
+    .win-lock-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(20px);
+      background: rgba(15, 23, 42, 0.5);
+      z-index: 10;
+    }
+
+    .win-desktop.locked .win-lock-content {
+      display: flex;
+    }
+
+    .lock-time {
+      font-size: 42px;
+      font-weight: 300;
+      color: #FFF;
+      letter-spacing: -1px;
+    }
+
+    .lock-date {
+      font-size: 13px;
+      color: #CBD5E1;
+      margin-top: -4px;
+      margin-bottom: 24px;
+    }
+
+    .lock-user-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lock-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+    }
+
+    .lock-username {
+      font-size: 14px;
+      font-weight: 600;
+      color: #FFF;
+    }
+
+    /* DESKTOP APPS ICONS (NORMAL MODE) */
+    .desktop-icons {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .desktop-icon-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      width: 50px;
+    }
+
+    .desktop-icon-img {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .desktop-icon-name {
+      font-size: 9px;
+      color: #FFF;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+      text-align: center;
+    }
+
+    /* WINDOWS TASKBAR */
+    .win-taskbar {
+      height: 28px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+    }
+
+    .taskbar-center {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tb-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+    }
+
+    .taskbar-tray {
+      font-size: 9px;
+      color: #94A3B8;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* VIRTUAL MOUSE CURSOR */
+    .simulated-cursor {
+      position: absolute;
+      top: 45%;
+      left: 45%;
+      width: 16px;
+      height: 16px;
+      pointer-events: none;
+      z-index: 40;
+      transition: transform 0.05s ease-out;
+    }
+
+    /* LOCK SCREEN FLOATING BANNER NOTIFICATION (TOP) */
+    .lock-alert-banner {
+      position: absolute;
+      top: 50px;
+      left: 16px;
+      right: 16px;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      border-radius: 18px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 60;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes slideDown {
+      from { transform: translateY(-30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .lock-banner-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .lock-badge-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: rgba(245, 158, 11, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #F59E0B;
+    }
+
+    .lock-banner-text h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #FFF;
+    }
+
+    .lock-banner-text p {
+      font-size: 10px;
+      color: #FBBF24;
+    }
+
+    .btn-unlock-banner {
+      background: linear-gradient(135deg, #F59E0B, #D97706);
+      border: none;
+      padding: 8px 14px;
+      border-radius: 10px;
+      color: #FFF;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+      transition: all 0.2s;
+    }
+
+    /* FLOATING ACTION DOCK (BOTTOM) */
+    .stream-dock {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 60;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    }
+
+    .dock-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: #94A3B8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .dock-btn span {
+      font-size: 8px;
+      font-weight: 600;
+    }
+
+    .dock-btn:hover, .dock-btn.active {
+      color: #FFF;
+      background: rgba(2, 132, 199, 0.3);
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+
+    .dock-btn.highlight {
+      background: rgba(245, 158, 11, 0.25);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: #FBBF24;
+    }
+
+    /* =================================================== */
+    /* SCREEN 3: REDESIGNED UNLOCK BOTTOM SHEET OVERLAY    */
+    /* =================================================== */
+    .unlock-sheet-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      z-index: 80;
+      display: none;
+      flex-direction: column;
+      justify-content: flex-end;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .unlock-sheet-overlay.active {
+      display: flex;
+      opacity: 1;
+    }
+
+    .unlock-sheet-card {
+      background: #0F172A;
+      border-top: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 28px 28px 0 0;
+      padding: 16px 22px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 -20px 40px rgba(0, 0, 0, 0.8);
+      animation: sheetUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes sheetUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+
+    .sheet-handle {
+      width: 36px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      margin: 0 auto;
+    }
+
+    .sheet-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sheet-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .shield-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      background: rgba(2, 132, 199, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #38BDF8;
+    }
+
+    .sheet-title h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #FFF;
+    }
+
+    .sheet-title p {
+      font-size: 11px;
+      color: #34D399;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-close-sheet {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: #94A3B8;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* PIN DISPLAY INDICATOR */
+    .pin-display-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 10px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+    }
+
+    .pin-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .pin-dot.filled {
+      background: #38BDF8;
+      border-color: #38BDF8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+      transform: scale(1.15);
+    }
+
+    /* IN-APP THUMB-FRIENDLY NUMPAD (NO NATIVE KEYBOARD POPUP REQUIRED!) */
+    .numpad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      max-width: 320px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .num-btn {
+      height: 52px;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #FFF;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .num-btn:active {
+      transform: scale(0.92);
+      background: rgba(2, 132, 199, 0.4);
+      border-color: #38BDF8;
+    }
+
+    .num-btn.subtext {
+      font-size: 18px;
+    }
+
+    .num-btn .sub-letters {
+      font-size: 8px;
+      color: var(--text-muted);
+      letter-spacing: 1.5px;
+      margin-top: -2px;
+    }
+
+    .num-btn.action {
+      font-size: 15px;
+      color: var(--text-muted);
+      background: rgba(15, 23, 42, 0.5);
+    }
+
+    .num-btn.submit {
+      background: var(--accent-gradient);
+      color: #FFF;
+      font-size: 15px;
+      font-weight: 700;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+    }
+
+    /* QUICK HELPER ACTION CHIPS ROW */
+    .unlock-chips-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .unlock-chip {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .unlock-chip:hover, .unlock-chip:active {
+      background: rgba(2, 132, 199, 0.2);
+      color: #FFF;
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+
+    .unlock-chip.danger {
+      color: #F87171;
+      border-color: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    /* TOAST NOTIFICATION SIMULATOR */
+    .toast-msg {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(16, 185, 129, 0.95);
+      color: #FFF;
+      padding: 10px 18px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+      z-index: 99;
+      animation: popToast 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes popToast {
+      from { transform: translate(-50%, 20px); opacity: 0; }
+      to { transform: translate(-50%, 0); opacity: 1; }
+    }
+
+    /* =================================================== */
+    /* SCREEN 4: SPECIAL VIRTUAL KEYBOARD & SHORTCUTS BAR  */
+    /* =================================================== */
+    .keyboard-drawer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(24px);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px 24px 0 0;
+      padding: 12px 14px 24px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 75;
+      box-shadow: 0 -15px 35px rgba(0, 0, 0, 0.7);
+    }
+
+    .keyboard-drawer.active {
+      display: flex;
+    }
+
+    .kb-row {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+    }
+
+    .kb-key {
+      flex: 1;
+      height: 38px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: #CBD5E1;
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+
+    .kb-key:active {
+      background: var(--accent);
+      color: #FFF;
+      transform: scale(0.95);
+    }
+
+    .kb-key.wide {
+      flex: 1.5;
+    }
+
+    .kb-key.special {
+      background: rgba(2, 132, 199, 0.2);
+      border-color: rgba(56, 189, 248, 0.3);
+      color: #38BDF8;
+    }
+
+    /* RIGHT SIDE: REVIEW & DESIGN NOTES PANEL */
+    .review-notes-panel {
+      flex: 1;
+      max-width: 500px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-dark);
+      border-radius: 24px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .notes-header h2 {
+      font-size: 18px;
+      font-weight: 800;
+      color: #FFF;
+      margin-bottom: 6px;
+    }
+
+    .notes-header p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .comparison-card {
+      background: rgba(30, 41, 59, 0.4);
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid var(--border-dark);
+    }
+
+    .comparison-card h3 {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-diff {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .badge-diff.old {
+      background: rgba(239, 68, 68, 0.2);
+      color: #F87171;
+    }
+
+    .badge-diff.new {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34D399;
+    }
+
+    .diff-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .diff-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .diff-list li.bad {
+      color: #FDA4AF;
+    }
+
+    .diff-list li.good {
+      color: #A7F3D0;
+    }
+
+    .feedback-box {
+      background: rgba(2, 132, 199, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 16px;
+      padding: 14px;
+      font-size: 12px;
+      color: #BAE6FD;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP REVIEW BAR -->
+  <header class="review-toolbar">
+    <div class="brand-group">
+      <div class="brand-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>AeroStream Android UI Prototype</h1>
+        <p>Bản thiết kế trải nghiệm người dùng & Mở khóa màn hình từ xa</p>
+      </div>
+    </div>
+
+    <!-- NAVIGATION TABS -->
+    <div class="nav-pills">
+      <button class="nav-btn active" onclick="switchScreen('connect')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+        1. AeroConnect (Trang chủ)
+      </button>
+      <button class="nav-btn" onclick="switchScreen('stream')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+        2. Remote Stream (Live)
+      </button>
+      <button class="nav-btn" onclick="openUnlockSheet()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        3. Modal Mở khóa (PIN Sheet)
+      </button>
+      <button class="nav-btn" onclick="toggleKeyboardDrawer()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8"/></svg>
+        4. Bàn phím & Phím tắt
+      </button>
+    </div>
+
+    <!-- CONTROLS & TOGGLES -->
+    <div class="controls-group">
+      <div class="ctrl-pill" id="btnOrientation" onclick="toggleOrientation()">
+        📱 Dọc (Portrait)
+      </div>
+      <div class="ctrl-pill" id="btnLockSim" onclick="toggleLockSimulation()">
+        🔓 Windows: Bình thường
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN STAGE -->
+  <main class="stage-container">
+    
+    <!-- SMARTPHONE DEVICE FRAME -->
+    <div class="phone-wrapper" id="phoneWrapper">
+      <div class="phone-frame">
+
+        <!-- DYNAMIC ISLAND -->
+        <div class="island-container">
+          <div class="dynamic-island" id="dynamicIsland" onclick="toggleIslandExpand()">
+            <div class="island-cam"></div>
+            <div class="island-pill-badge">
+              <span class="island-pulse"></span>
+              <span id="islandFps">60 FPS</span> • <span id="islandLatency">2.8ms</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATUS BAR -->
+        <div class="status-bar">
+          <span id="deviceClock">09:41</span>
+          <div class="status-icons">
+            <span>5G</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <!-- SCREEN VIEWPORT -->
+        <div class="screen-viewport">
+
+          <!-- ============================================== -->
+          <!-- VIEW 1: HOME & CONNECT (AeroConnect)           -->
+          <!-- ============================================== -->
+          <div class="view-panel active connect-screen" id="panelConnect">
+            
+            <div class="header-profile">
+              <div class="app-title-group">
+                <div class="app-logo-badge">⚡</div>
+                <div>
+                  <h2>AeroStream</h2>
+                  <span>v2.2 Native Ultra</span>
+                </div>
+              </div>
+              <div style="background: rgba(255,255,255,0.08); width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #FFF; cursor: pointer;">
+                ⚙️
+              </div>
+            </div>
+
+            <!-- DISCOVERED HOST HERO CARD -->
+            <div class="radar-card">
+              <div class="radar-header">
+                <div class="live-status-pill">
+                  <span class="island-pulse"></span>
+                  LAN DISCOVERED
+                </div>
+                <span style="font-size: 11px; color: var(--accent-glow); font-family: 'JetBrains Mono', monospace;">8080 TCP/UDP</span>
+              </div>
+
+              <div class="host-info-row">
+                <div class="pc-avatar">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+                </div>
+                <div class="pc-details">
+                  <h3>DESKTOP-CRAYN</h3>
+                  <p>10.97.36.227</p>
+                </div>
+              </div>
+
+              <div class="metrics-grid">
+                <div class="metric-item">
+                  <div class="val" style="color: #34D399;">2.8 ms</div>
+                  <div class="lbl">Ping LAN</div>
+                </div>
+                <div class="metric-item">
+                  <div class="val">60 FPS</div>
+                  <div class="lbl">Tần số</div>
+                </div>
+                <div class="metric-item">
+                  <div class="val">Intel QSV</div>
+                  <div class="lbl">H.264 HW</div>
+                </div>
+              </div>
+
+              <!-- MODE SWITCHER -->
+              <div class="mode-tabs">
+                <div class="mode-tab-btn active" id="tabConsole" onclick="selectMode('console')">
+                  ⚡ Console (60 FPS)
+                </div>
+                <div class="mode-tab-btn" id="tabSession" onclick="selectMode('session')">
+                  🛡️ Session (RDP Phụ)
+                </div>
+              </div>
+
+              <div style="margin-top: 14px;">
+                <button class="btn-connect-hero" onclick="switchScreen('stream')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  Kết nối ngay (Instant Connect)
+                </button>
+              </div>
+            </div>
+
+            <!-- MANUAL IP / PIN ACCORDION -->
+            <div class="section-title">
+              <span>Kết nối thủ công (IP & PIN)</span>
+              <span style="font-size: 10px; color: var(--accent-glow); cursor: pointer;">Quét QR Code</span>
+            </div>
+
+            <div class="custom-card">
+              <div class="input-field-group">
+                <div class="input-label">Địa chỉ IP Máy tính Host</div>
+                <input class="input-control" type="text" value="10.97.36.227:8080">
+              </div>
+
+              <div class="input-field-group">
+                <div class="input-label">Mã PIN xác thực (6 số trên màn hình Host)</div>
+                <div class="pin-boxes-row">
+                  <div class="pin-box filled">4</div>
+                  <div class="pin-box filled">9</div>
+                  <div class="pin-box filled">0</div>
+                  <div class="pin-box filled">4</div>
+                  <div class="pin-box filled">6</div>
+                  <div class="pin-box filled">0</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- RECENT CONNECTIONS -->
+            <div class="section-title">
+              <span>Lịch sử kết nối gần đây</span>
+            </div>
+
+            <div class="recent-list">
+              <div class="recent-item" onclick="switchScreen('stream')">
+                <div class="recent-left">
+                  <div class="recent-dot"></div>
+                  <div>
+                    <div class="recent-name">DESKTOP-CRAYN (Windows 11 Pro)</div>
+                    <div class="recent-ip">10.97.36.227:8080 • Vừa xong</div>
+                  </div>
+                </div>
+                <span style="color: var(--accent-glow); font-size: 13px;">➔</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ============================================== -->
+          <!-- VIEW 2: REMOTE STREAM (Live Screen)            -->
+          <!-- ============================================== -->
+          <div class="view-panel" id="panelStream">
+            <div class="stream-viewport">
+
+              <!-- DESKTOP SIMULATOR -->
+              <div class="win-desktop" id="winDesktop">
+                
+                <!-- TOP LOCK ALERT BANNER (CHỈ HIỆN KHI LOCK) -->
+                <div class="lock-alert-banner" id="lockAlertBanner" style="display: none;">
+                  <div class="lock-banner-left">
+                    <div class="lock-badge-icon">
+                      🔒
+                    </div>
+                    <div class="lock-banner-text">
+                      <h4>Máy tính đang bị khóa</h4>
+                      <p>SYSTEM Agent sẵn sàng nhận lệnh mở khóa</p>
+                    </div>
+                  </div>
+                  <button class="btn-unlock-banner" onclick="openUnlockSheet()">
+                    🔑 Mở khóa
+                  </button>
+                </div>
+
+                <!-- DESKTOP ICONS (UNLOCKED STATE) -->
+                <div class="desktop-icons" id="desktopIcons">
+                  <div class="desktop-icon-item">
+                    <div class="desktop-icon-img" style="background: rgba(14, 165, 233, 0.3);">💻</div>
+                    <div class="desktop-icon-name">This PC</div>
+                  </div>
+                  <div class="desktop-icon-item">
+                    <div class="desktop-icon-img" style="background: rgba(16, 185, 129, 0.3);">🌐</div>
+                    <div class="desktop-icon-name">Edge</div>
+                  </div>
+                  <div class="desktop-icon-item">
+                    <div class="desktop-icon-img" style="background: rgba(245, 158, 11, 0.3);">📁</div>
+                    <div class="desktop-icon-name">StreamApp</div>
+                  </div>
+                </div>
+
+                <!-- SIMULATED MOUSE CURSOR -->
+                <div class="simulated-cursor" id="simCursor">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#38BDF8" stroke="#000" stroke-width="1.5"><polygon points="3 3 10 21 14 14 21 10 3 3"/></svg>
+                </div>
+
+                <!-- LOCK SCREEN OVERLAY -->
+                <div class="win-lock-content" id="winLockOverlay">
+                  <div class="lock-time" id="lockTime">12:30</div>
+                  <div class="lock-date">Thứ Tư, 23 tháng 9</div>
+                  <div class="lock-user-badge">
+                    <div class="lock-avatar">👤</div>
+                    <div class="lock-username">crayn</div>
+                    <div style="font-size: 11px; color: #94A3B8;">Màn hình bảo mật Windows (LogonUI)</div>
+                  </div>
+                </div>
+
+                <!-- WINDOWS TASKBAR -->
+                <div class="win-taskbar">
+                  <div class="taskbar-center">
+                    <div class="tb-icon" style="background: rgba(2, 132, 199, 0.4); color: #38BDF8;">🪟</div>
+                    <div class="tb-icon">🔍</div>
+                    <div class="tb-icon">📁</div>
+                    <div class="tb-icon">🌐</div>
+                  </div>
+                  <div class="taskbar-tray">12:30 PM</div>
+                </div>
+
+              </div>
+
+              <!-- FLOATING CONTROLLER DOCK -->
+              <div class="stream-dock">
+                <div class="dock-btn" onclick="toggleKeyboardDrawer()">
+                  ⌨️
+                  <span>Phím</span>
+                </div>
+                <div class="dock-btn active" id="btnMouseMode" onclick="toggleMouseMode()">
+                  🖱️
+                  <span id="lblMouseMode">Trackpad</span>
+                </div>
+                <div class="dock-btn highlight" id="btnDockLock" onclick="openUnlockSheet()">
+                  🔑
+                  <span>Mở khóa</span>
+                </div>
+                <div class="dock-btn" onclick="toggleAudioMute()">
+                  🔊
+                  <span id="lblAudio">Âm thanh</span>
+                </div>
+                <div class="dock-btn" onclick="switchScreen('connect')">
+                  ❌
+                  <span>Thoát</span>
+                </div>
+              </div>
+
+              <!-- TOAST NOTIFICATION -->
+              <div class="toast-msg" id="toastMsg">
+                <span>🚀 Đã gửi tín hiệu mở khóa!</span>
+              </div>
+
+              <!-- ============================================== -->
+              <!-- SCREEN 3: REDESIGNED UNLOCK SHEET OVERLAY      -->
+              <!-- ============================================== -->
+              <div class="unlock-sheet-overlay" id="unlockSheet">
+                <div class="unlock-sheet-card">
+                  
+                  <div class="sheet-handle"></div>
+
+                  <div class="sheet-header-row">
+                    <div class="sheet-header-left">
+                      <div class="shield-icon">
+                        🛡️
+                      </div>
+                      <div class="sheet-title">
+                        <h3>Mở khóa Windows (SYSTEM)</h3>
+                        <p><span class="island-pulse"></span> Sẵn sàng qua Named Pipe IPC</p>
+                      </div>
+                    </div>
+                    <button class="btn-close-sheet" onclick="closeUnlockSheet()">✕</button>
+                  </div>
+
+                  <!-- PIN DOTS DISPLAY -->
+                  <div class="pin-display-wrapper">
+                    <div class="pin-dot" id="dot1"></div>
+                    <div class="pin-dot" id="dot2"></div>
+                    <div class="pin-dot" id="dot3"></div>
+                    <div class="pin-dot" id="dot4"></div>
+                  </div>
+
+                  <!-- THUMB-FRIENDLY NUMPAD (NO CLUMSY NATIVE KEYBOARD POPUP!) -->
+                  <div class="numpad-grid">
+                    <button class="num-btn subtext" onclick="pressNum('1')">1<span class="sub-letters">&nbsp;</span></button>
+                    <button class="num-btn subtext" onclick="pressNum('2')">2<span class="sub-letters">ABC</span></button>
+                    <button class="num-btn subtext" onclick="pressNum('3')">3<span class="sub-letters">DEF</span></button>
+                    <button class="num-btn subtext" onclick="pressNum('4')">4<span class="sub-letters">GHI</span></button>
+                    <button class="num-btn subtext" onclick="pressNum('5')">5<span class="sub-letters">JKL</span></button>
+                    <button class="num-btn subtext" onclick="pressNum('6')">6<span class="sub-letters">MNO</span></button>
+                    <button class="num-btn subtext" onclick="pressNum('7')">7<span class="sub-letters">PQRS</span></button>
+                    <button class="num-btn subtext" onclick="pressNum('8')">8<span class="sub-letters">TUV</span></button>
+                    <button class="num-btn subtext" onclick="pressNum('9')">9<span class="sub-letters">WXYZ</span></button>
+                    <button class="num-btn action" onclick="clearPin()">Xóa</button>
+                    <button class="num-btn subtext" onclick="pressNum('0')">0<span class="sub-letters">+</span></button>
+                    <button class="num-btn submit" onclick="submitUnlock()">Enter ↵</button>
+                  </div>
+
+                  <!-- QUICK HELPER CHIPS -->
+                  <div class="unlock-chips-row">
+                    <div class="unlock-chip" onclick="triggerWakeGesture()">
+                      🔄 Đánh thức màn hình
+                    </div>
+                    <div class="unlock-chip danger" onclick="triggerCtrlAltDel()">
+                      🛡️ Ctrl+Alt+Del
+                    </div>
+                    <div class="unlock-chip" onclick="simulateBiometric()">
+                      👆 Vân tay (Auto-PIN)
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- ============================================== -->
+              <!-- SCREEN 4: SPECIAL VIRTUAL KEYBOARD DRAWER      -->
+              <!-- ============================================== -->
+              <div class="keyboard-drawer" id="keyboardDrawer">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <span style="font-size: 11px; font-weight: 700; color: #94A3B8;">BÀN PHÍM CHUYÊN DỤNG WINDOWS</span>
+                  <span style="font-size: 12px; color: #CBD5E1; cursor: pointer;" onclick="toggleKeyboardDrawer()">✕ Đóng</span>
+                </div>
+                <div class="kb-row">
+                  <div class="kb-key special" onclick="sendSimKey('Esc')">Esc</div>
+                  <div class="kb-key" onclick="sendSimKey('F1')">F1</div>
+                  <div class="kb-key" onclick="sendSimKey('F5')">F5</div>
+                  <div class="kb-key" onclick="sendSimKey('F11')">F11</div>
+                  <div class="kb-key special" onclick="sendSimKey('Win')">Win</div>
+                  <div class="kb-key wide special" onclick="sendSimKey('Tab')">Tab ⇥</div>
+                </div>
+                <div class="kb-row">
+                  <div class="kb-key wide special" onclick="sendSimKey('Ctrl')">Ctrl</div>
+                  <div class="kb-key special" onclick="sendSimKey('Alt')">Alt</div>
+                  <div class="kb-key" onclick="sendSimKey('Win+D')">Win+D</div>
+                  <div class="kb-key" onclick="sendSimKey('Alt+Tab')">Alt+Tab</div>
+                  <div class="kb-key wide special" onclick="sendSimKey('Del')">Del ⌦</div>
+                </div>
+                <div class="kb-row">
+                  <div class="kb-key wide" onclick="sendSimKey('Space')">Spacebar ␣</div>
+                  <div class="kb-key" onclick="sendSimKey('↑')">↑</div>
+                  <div class="kb-key" onclick="sendSimKey('↓')">↓</div>
+                  <div class="kb-key" onclick="sendSimKey('←')">←</div>
+                  <div class="kb-key" onclick="sendSimKey('→')">→</div>
+                  <div class="kb-key wide special" onclick="sendSimKey('Enter')">Enter ↵</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- REVIEW & DESIGN RATIONALE PANEL -->
+    <div class="review-notes-panel">
+      <div class="notes-header">
+        <h2>Phân tích & Đề xuất Cải tiến Giao diện</h2>
+        <p>So sánh giữa thiết kế hiện tại trên Flutter và bản thiết kế đề xuất mới (Prototype)</p>
+      </div>
+
+      <!-- COMPARISON 1 -->
+      <div class="comparison-card">
+        <h3>
+          <span class="badge-diff old">HIỆN TẠI</span> 
+          <span>Vấn đề ở màn hình mở khóa (Lock Screen Unlock)</span>
+        </h3>
+        <ul class="diff-list">
+          <li class="bad">❌ Khi bấm mở khóa, app mở Modal Bottom Sheet và bật Bàn phím ảo Android che mất gần hết màn hình và các nút bấm quan trọng.</li>
+          <li class="bad">❌ Người dùng phải bấm 2-3 bước: Mở sheet -> Bật bàn phím -> Gõ PIN -> Bấm Enter -> Tắt phím.</li>
+          <li class="bad">❌ Không có tín hiệu trực quan cho biết máy tính đang khóa hay mở.</li>
+        </ul>
+      </div>
+
+      <!-- COMPARISON 2 -->
+      <div class="comparison-card" style="border-color: rgba(16, 185, 129, 0.3);">
+        <h3>
+          <span class="badge-diff new">ĐỀ XUẤT MỚI</span> 
+          <span>Giải pháp thiết kế trên bản Prototype này</span>
+        </h3>
+        <ul class="diff-list">
+          <li class="good">✅ <strong>Bàn phím số Numpad tích hợp sẵn</strong>: Bấm số cực to, thao tác 1 tay siêu nhanh, KHÔNG bị bàn phím Android che khuất!</li>
+          <li class="good">✅ <strong>Dynamic Alert Banner</strong>: Tự động trượt xuống khi máy tính bị khóa (`Win + L`) kèm nút "Mở khóa ngay".</li>
+          <li class="good">✅ <strong>Nút Đánh thức (Wake/Swipe) & Ctrl+Alt+Del 1-tap</strong>: Tự động gạt màn hình khóa LockApp để đưa ô password vào tiêu điểm.</li>
+          <li class="good">✅ <strong>Mô phỏng Sinh trắc học (Fingerprint)</strong>: Chạm vân tay điện thoại là tự động điền mã PIN mở khóa máy tính.</li>
+          <li class="good">✅ <strong>Dynamic Island HUD</strong>: Hiển thị trạng thái FPS/Ping gọn gàng như iPhone, chạm vào để mở nhanh các công cụ.</li>
+        </ul>
+      </div>
+
+      <div class="feedback-box">
+        💡 <strong>Bạn có thể tương tác trực tiếp với điện thoại bên trái:</strong><br>
+        - Bấm vào nút <strong>"3. Modal Mở khóa"</strong> trên thanh công cụ để thử gõ mã PIN (ví dụ: 5-3-6-8).<br>
+        - Bấm nút <strong>"🔓 Windows: Bình thường"</strong> để giả lập trạng thái khóa màn hình (`Win + L`).<br>
+        - Bấm <strong>"📱 Dọc (Portrait)"</strong> để đổi sang chế độ xoay ngang (Landscape 16:9).
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // State
+    let isLandscape = false;
+    let isLocked = false;
+    let pinInput = '';
+    let mouseMode = 'trackpad'; // 'trackpad' or 'touch'
+    let isAudioMuted = false;
+
+    function switchScreen(screenName) {
+      document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+      if (screenName === 'connect') {
+        document.getElementById('panelConnect').classList.add('active');
+        document.querySelectorAll('.nav-btn')[0].classList.add('active');
+      } else if (screenName === 'stream') {
+        document.getElementById('panelStream').classList.add('active');
+        document.querySelectorAll('.nav-btn')[1].classList.add('active');
+      }
+    }
+
+    function toggleOrientation() {
+      isLandscape = !isLandscape;
+      const wrapper = document.getElementById('phoneWrapper');
+      const btn = document.getElementById('btnOrientation');
+      if (isLandscape) {
+        wrapper.classList.add('landscape');
+        btn.textContent = '📟 Ngang (Landscape)';
+        btn.classList.add('active');
+      } else {
+        wrapper.classList.remove('landscape');
+        btn.textContent = '📱 Dọc (Portrait)';
+        btn.classList.remove('active');
+      }
+    }
+
+    function toggleLockSimulation() {
+      isLocked = !isLocked;
+      const winDesktop = document.getElementById('winDesktop');
+      const banner = document.getElementById('lockAlertBanner');
+      const btn = document.getElementById('btnLockSim');
+      const dockLock = document.getElementById('btnDockLock');
+
+      if (isLocked) {
+        winDesktop.classList.add('locked');
+        banner.style.display = 'flex';
+        btn.textContent = '🔒 Windows: ĐANG KHÓA';
+        btn.classList.add('active');
+        dockLock.classList.add('highlight');
+        showToast('🔒 Windows vừa bị khóa (Winlogon)');
+      } else {
+        winDesktop.classList.remove('locked');
+        banner.style.display = 'none';
+        btn.textContent = '🔓 Windows: Bình thường';
+        btn.classList.remove('active');
+        dockLock.classList.remove('highlight');
+        showToast('🔓 Windows đã được mở khóa!');
+      }
+    }
+
+    function openUnlockSheet() {
+      switchScreen('stream');
+      document.getElementById('unlockSheet').classList.add('active');
+      clearPin();
+    }
+
+    function closeUnlockSheet() {
+      document.getElementById('unlockSheet').classList.remove('active');
+    }
+
+    function pressNum(num) {
+      if (pinInput.length < 4) {
+        pinInput += num;
+        updatePinDots();
+      }
+      if (pinInput.length === 4) {
+        setTimeout(submitUnlock, 250);
+      }
+    }
+
+    function clearPin() {
+      pinInput = '';
+      updatePinDots();
+    }
+
+    function updatePinDots() {
+      for (let i = 1; i <= 4; i++) {
+        const dot = document.getElementById('dot' + i);
+        if (i <= pinInput.length) {
+          dot.classList.add('filled');
+        } else {
+          dot.classList.remove('filled');
+        }
+      }
+    }
+
+    function submitUnlock() {
+      showToast('🚀 Đang gửi mã mở khóa qua SYSTEM Named Pipe...');
+      setTimeout(() => {
+        closeUnlockSheet();
+        if (isLocked) {
+          toggleLockSimulation(); // Unlock
+        }
+        showToast('✅ Mở khóa máy tính thành công!');
+      }, 700);
+    }
+
+    function triggerWakeGesture() {
+      showToast('🔄 Đang gửi tín hiệu đánh thức (SendSAS + Swipe)...');
+    }
+
+    function triggerCtrlAltDel() {
+      showToast('🛡️ Đã gửi tổ hợp Ctrl + Alt + Delete!');
+    }
+
+    function simulateBiometric() {
+      showToast('👆 Xác thực vân tay thành công! Đang tự động mở khóa...');
+      pinInput = '5368';
+      updatePinDots();
+      setTimeout(submitUnlock, 400);
+    }
+
+    function toggleKeyboardDrawer() {
+      switchScreen('stream');
+      const drawer = document.getElementById('keyboardDrawer');
+      drawer.classList.toggle('active');
+    }
+
+    function sendSimKey(key) {
+      showToast('⌨️ Đã gửi phím: ' + key);
+    }
+
+    function toggleMouseMode() {
+      const lbl = document.getElementById('lblMouseMode');
+      const btn = document.getElementById('btnMouseMode');
+      if (mouseMode === 'trackpad') {
+        mouseMode = 'touch';
+        lbl.textContent = 'Chạm';
+        btn.classList.remove('active');
+        showToast('🖱️ Chuyển sang chế độ: Chạm trực tiếp');
+      } else {
+        mouseMode = 'trackpad';
+        lbl.textContent = 'Trackpad';
+        btn.classList.add('active');
+        showToast('🖱️ Chuyển sang chế độ: Bàn rê chuột (Trackpad)');
+      }
+    }
+
+    function toggleAudioMute() {
+      isAudioMuted = !isAudioMuted;
+      const lbl = document.getElementById('lblAudio');
+      if (isAudioMuted) {
+        lbl.textContent = 'Tắt tiếng';
+        showToast('🔇 Đã tắt âm thanh WASAPI');
+      } else {
+        lbl.textContent = 'Âm thanh';
+        showToast('🔊 Đã bật âm thanh WASAPI Loopback 48kHz');
+      }
+    }
+
+    function selectMode(m) {
+      document.getElementById('tabConsole').classList.toggle('active', m === 'console');
+      document.getElementById('tabSession').classList.toggle('active', m === 'session');
+      showToast('Chuyển chế độ kết nối: ' + (m === 'console' ? 'Console (Chính)' : 'Session (RDP Riêng)'));
+    }
+
+    function toggleIslandExpand() {
+      showToast('🟢 Độ trễ: 2.8ms | Bitrate: 7.2 Mbps | Codec: Intel QSV');
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastMsg');
+      toast.textContent = msg;
+      toast.style.display = 'flex';
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, 2200);
+    }
+
+    // Interactive cursor follow in Stream view
+    const winDesk = document.getElementById('winDesktop');
+    const simCur = document.getElementById('simCursor');
+    winDesk.addEventListener('mousemove', (e) => {
+      const rect = winDesk.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      simCur.style.left = x + 'px';
+      simCur.style.top = y + 'px';
+    });
+
+    // Update real clock
+    function updateClock() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('deviceClock').textContent = timeStr;
+      document.getElementById('lockTime').textContent = timeStr;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
+</body>
+</html>

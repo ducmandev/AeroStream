@@ -72,6 +72,7 @@ class _WindowsDashboardScreenState extends State<WindowsDashboardScreen> {
         final candidates = [
           '$currentDir\\aerostream.exe',
           '$currentDir\\aerostream_engine.exe',
+          'd:\\StreamApp\\deploy\\aerostream.exe',
           'd:\\StreamApp\\target\\release\\aerostream.exe',
           'aerostream.exe',
         ];

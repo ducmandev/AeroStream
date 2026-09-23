@@ -13,12 +13,14 @@ class RemoteDesktopScreen extends StatefulWidget {
   final String hostIp;
   final String port;
   final String pin;
+  final String mode;
 
   const RemoteDesktopScreen({
     super.key,
     required this.hostIp,
     required this.port,
     required this.pin,
+    this.mode = 'console',
   });
 
   @override
@@ -43,6 +45,9 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
 
   bool _isDirectTouch = true;
   bool _isDesktopLocked = false;
+  late String _activeMode;
+  bool _hasEverConnected = false;
+  bool _isSessionDisconnected = false;
   Timer? _islandTimer;
   bool _isHudCollapsed = false;
   HudDockEdge _hudDockEdge = HudDockEdge.top;
@@ -177,6 +182,7 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
   @override
   void initState() {
     super.initState();
+    _activeMode = widget.mode;
     WidgetsBinding.instance.addObserver(this);
     _connectWebSocket();
     _startPingTimer();
@@ -235,7 +241,7 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
   Future<void> _connectWebSocket() async {
     if (_isReconnecting) return;
     _isReconnecting = true;
-    final url = 'ws://${widget.hostIp}:${widget.port}/ws?pin=${Uri.encodeComponent(widget.pin)}';
+    final url = 'ws://${widget.hostIp}:${widget.port}/ws?pin=${Uri.encodeComponent(widget.pin)}&mode=$_activeMode';
     try {
       final ws = await WebSocket.connect(url).timeout(const Duration(seconds: 5));
       if (!mounted) return;
@@ -243,6 +249,8 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
       setState(() {
         _socket = ws;
         _isConnected = true;
+        _hasEverConnected = true;
+        _isSessionDisconnected = false;
         _isReconnecting = false;
       });
       _audioControlChannel.invokeMethod('start');
@@ -285,6 +293,13 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
                     _isDesktopLocked = locked;
                   });
                 }
+              } else if (json['type'] == 'session_status') {
+                final connected = json['connected'] as bool? ?? false;
+                if (_isSessionDisconnected != !connected && mounted) {
+                  setState(() {
+                    _isSessionDisconnected = !connected;
+                  });
+                }
               } else if (json['type'] == 'cursor') {
                 final x = (json['x'] as num?)?.toDouble();
                 final y = (json['y'] as num?)?.toDouble();
@@ -302,6 +317,22 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
           }
         },
         onError: (err) {
+          if (_activeMode == 'session' && !_hasEverConnected) {
+            debugPrint('[Dual-Mode] Session mode connection failed/rejected (HTTP 503). Auto-falling back to Console mode...');
+            _activeMode = 'console';
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Host từ chối phiên Session Mode. Tự động chuyển về Console Mode...'),
+                  backgroundColor: Color(0xFF2563EB),
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            }
+            _isReconnecting = false;
+            Future.delayed(const Duration(milliseconds: 600), _connectWebSocket);
+            return;
+          }
           if (mounted) {
             setState(() {
               _isConnected = false;
@@ -326,6 +357,22 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
         cancelOnError: true,
       );
     } catch (e) {
+      if (_activeMode == 'session' && !_hasEverConnected) {
+        debugPrint('[Dual-Mode] Session mode connection error. Auto-falling back to Console mode...');
+        _activeMode = 'console';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Không thể tạo phiên Session Mode. Tự động chuyển về Console Mode...'),
+              backgroundColor: Color(0xFF2563EB),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        _isReconnecting = false;
+        Future.delayed(const Duration(milliseconds: 600), _connectWebSocket);
+        return;
+      }
       if (mounted) {
         setState(() {
           _isConnected = false;
@@ -1266,8 +1313,8 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
               },
             ),
 
-            // Top Host Desktop Lock Status Banner
-            if (_isDesktopLocked)
+            // Top Host Desktop Lock Status Banner (Console Mode)
+            if (_isDesktopLocked && _activeMode == 'console')
               SafeArea(
                 child: Align(
                   alignment: Alignment.topCenter,
@@ -1275,20 +1322,113 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
                     margin: const EdgeInsets.only(top: 50),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withOpacity(0.95),
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.6), width: 1.2),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 16, offset: const Offset(0, 4)),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.lock_rounded, color: Color(0xFFF59E0B), size: 17),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Màn hình Windows đang khóa',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        InkWell(
+                          onTap: () {
+                            _showPinUnlockSheet();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF0284C7), Color(0xFF2563EB)],
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.dialpad_rounded, color: Colors.white, size: 13),
+                                SizedBox(width: 5),
+                                Text(
+                                  'Mở khóa (Numpad)',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        InkWell(
+                          onTap: () {
+                            _sendInput({'type': 'shortcut', 'keys': ['Control', 'Alt', 'Delete']});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('🛡 Đã gửi tổ hợp Ctrl+Alt+Del tới máy chủ'),
+                                duration: Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Ctrl+Alt+Del',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+            // Top Session Disconnected Banner (Session Mode)
+            if (_isSessionDisconnected && _activeMode == 'session')
+              SafeArea(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 50),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEA580C).withOpacity(0.95),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 3)),
                       ],
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.lock_rounded, color: Colors.white, size: 16),
-                        SizedBox(width: 8),
-                        Text(
-                          'Máy host đang khóa — Chỉ xem được (UIPI chặn thao tác từ xa)',
+                        const Icon(Icons.flash_off_rounded, color: Colors.white, size: 16),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Phiên Session bị ngắt kết nối',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        InkWell(
+                          onTap: _connectWebSocket,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white24,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('Nối lại', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
                         ),
                       ],
                     ),
@@ -1509,6 +1649,42 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
             ],
 
             const SizedBox(width: 8),
+            // Connection Mode Badge (Console vs Session)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: _activeMode == 'session'
+                    ? (isLight ? const Color(0xFFF5F3FF) : const Color(0xFF7C3AED).withOpacity(0.25))
+                    : (isLight ? const Color(0xFFEFF6FF) : const Color(0xFF2563EB).withOpacity(0.25)),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _activeMode == 'session'
+                      ? (isLight ? const Color(0xFFC4B5FD) : const Color(0xFFA78BFA))
+                      : (isLight ? const Color(0xFFBFDBFE) : const Color(0xFF60A5FA)),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _activeMode == 'session' ? Icons.person_rounded : Icons.desktop_windows_rounded,
+                    size: 11,
+                    color: _activeMode == 'session' ? const Color(0xFF7C3AED) : const Color(0xFF2563EB),
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    _activeMode == 'session' ? 'Session' : 'Console',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: _activeMode == 'session' ? const Color(0xFF7C3AED) : const Color(0xFF2563EB),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 8),
             // Mode Pill
             InkWell(
               onTap: () {
@@ -1606,6 +1782,29 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
                   color: !_isDirectTouch
                       ? (isLight ? const Color(0xFF0067C0) : const Color(0xFF38BDF8))
                       : (isLight ? const Color(0xFF475569) : Colors.white70),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Dedicated Lock / Unlock Screen Numpad
+            InkWell(
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                _resetIslandTimer(forceOpen: true);
+                _showPinUnlockSheet();
+              },
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: _isDesktopLocked
+                      ? const Color(0xFFF59E0B).withValues(alpha: 0.25)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  _isDesktopLocked ? Icons.lock_outline_rounded : Icons.dialpad_rounded,
+                  size: 16,
+                  color: _isDesktopLocked ? const Color(0xFFF59E0B) : (isLight ? const Color(0xFF0067C0) : const Color(0xFF38BDF8)),
                 ),
               ),
             ),
@@ -2192,6 +2391,534 @@ class _RemoteDesktopScreenState extends State<RemoteDesktopScreen> with WidgetsB
                 fontWeight: FontWeight.w600,
                 fontFamily: 'monospace',
                 color: textColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPinUnlockSheet() {
+    HapticFeedback.mediumImpact();
+    // 1. Immediately wake the host screen so it dismisses wallpaper/slideshow
+    _sendInput({'type': 'wake_lock_screen'});
+    _sendInput({'type': 'key_click', 'key': 'Space'});
+    _sendInput({'type': 'key_click', 'key': 'Enter'});
+
+    final bool isLight = _isLightTheme;
+    String pinBuffer = '';
+    bool isTextKeyboardMode = false;
+    final TextEditingController textPassController = TextEditingController();
+    bool obscure = true;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isLight ? Colors.white : const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            void onDigitPressed(String digit) {
+              HapticFeedback.lightImpact();
+              if (pinBuffer.length < 12) {
+                setSheetState(() {
+                  pinBuffer += digit;
+                });
+              }
+            }
+
+            void onBackspace() {
+              HapticFeedback.lightImpact();
+              if (pinBuffer.isNotEmpty) {
+                setSheetState(() {
+                  pinBuffer = pinBuffer.substring(0, pinBuffer.length - 1);
+                });
+              }
+            }
+
+            void onClearAll() {
+              HapticFeedback.mediumImpact();
+              setSheetState(() {
+                pinBuffer = '';
+              });
+            }
+
+            void onSubmitUnlock() {
+              HapticFeedback.mediumImpact();
+              final passwordToSend = isTextKeyboardMode ? textPassController.text : pinBuffer;
+              _sendInput({'type': 'wake_lock_screen'});
+              if (passwordToSend.isNotEmpty) {
+                _sendInput({'type': 'text', 'text': passwordToSend});
+              }
+              _sendInput({'type': 'key_click', 'key': 'Enter'});
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('🚀 Đang gửi mã mở khóa tới máy chủ...'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 18,
+                right: 18,
+                top: 14,
+                bottom: isTextKeyboardMode ? MediaQuery.of(ctx).viewInsets.bottom + 16 : 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Top Drag Handle
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isLight ? const Color(0xFFCBD5E1) : Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Header with Status and Mode Switcher
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0284C7).withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.lock_open_rounded, color: Color(0xFF0284C7), size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mở khóa Windows',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isLight ? const Color(0xFF0F172A) : Colors.white,
+                              ),
+                            ),
+                            Text(
+                              isTextKeyboardMode ? 'Chế độ mật khẩu chữ (Bàn phím ảo)' : 'Bàn phím số Numpad (Không che màn hình)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isLight ? const Color(0xFF64748B) : Colors.white60,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Mode Toggle Button (Numpad vs Text)
+                      InkWell(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setSheetState(() {
+                            isTextKeyboardMode = !isTextKeyboardMode;
+                            if (isTextKeyboardMode && pinBuffer.isNotEmpty) {
+                              textPassController.text = pinBuffer;
+                            } else if (!isTextKeyboardMode && textPassController.text.isNotEmpty) {
+                              pinBuffer = textPassController.text;
+                            }
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : Colors.white12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isTextKeyboardMode ? Icons.dialpad_rounded : Icons.keyboard_rounded,
+                                size: 14,
+                                color: const Color(0xFF0284C7),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isTextKeyboardMode ? '123 Numpad' : 'Chữ ABC',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0284C7)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: Icon(Icons.close_rounded, size: 20, color: isLight ? Colors.black54 : Colors.white60),
+                        onPressed: () => Navigator.pop(ctx),
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // PIN Display Card
+                  if (!isTextKeyboardMode) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: pinBuffer.isNotEmpty
+                              ? const Color(0xFF0284C7)
+                              : (isLight ? const Color(0xFFE2E8F0) : Colors.white12),
+                          width: pinBuffer.isNotEmpty ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.password_rounded,
+                            size: 18,
+                            color: pinBuffer.isNotEmpty ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF94A3B8) : Colors.white38),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: pinBuffer.isEmpty
+                                ? Text(
+                                    'Chạm các số bên dưới để nhập mã PIN...',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isLight ? const Color(0xFF94A3B8) : Colors.white38,
+                                    ),
+                                  )
+                                : Row(
+                                    children: List.generate(
+                                      pinBuffer.length,
+                                      (idx) => Container(
+                                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                                        child: obscure
+                                            ? Container(
+                                                width: 10,
+                                                height: 10,
+                                                decoration: const BoxDecoration(
+                                                  color: Color(0xFF0284C7),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              )
+                                            : Text(
+                                                pinBuffer[idx],
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isLight ? const Color(0xFF0F172A) : Colors.white,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                          if (pinBuffer.isNotEmpty) ...[
+                            InkWell(
+                              onTap: () {
+                                setSheetState(() => obscure = !obscure);
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(
+                                  obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                                  size: 18,
+                                  color: isLight ? Colors.black45 : Colors.white60,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            InkWell(
+                              onTap: onClearAll,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.cancel_rounded,
+                                  size: 18,
+                                  color: isLight ? Colors.black45 : Colors.white60,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Quick Helpers Chips Row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              _sendInput({'type': 'wake_lock_screen'});
+                              _sendInput({'type': 'key_click', 'key': 'Space'});
+                              _sendInput({'type': 'key_click', 'key': 'Enter'});
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isLight ? const Color(0xFFF1F5F9) : Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: isLight ? const Color(0xFFE2E8F0) : Colors.white12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.refresh_rounded, size: 12, color: isLight ? const Color(0xFF0284C7) : const Color(0xFF38BDF8)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Đánh thức (Space)',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: isLight ? const Color(0xFF0284C7) : const Color(0xFF38BDF8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              _sendInput({'type': 'shortcut', 'keys': ['Control', 'Alt', 'Delete']});
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.25)),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.security_rounded, size: 12, color: Color(0xFFEF4444)),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Ctrl+Alt+Del',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFFEF4444),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Built-in 3x4 Glass Numpad Grid
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B).withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              _buildNumpadButton('1', () => onDigitPressed('1'), isLight),
+                              _buildNumpadButton('2', () => onDigitPressed('2'), isLight),
+                              _buildNumpadButton('3', () => onDigitPressed('3'), isLight),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              _buildNumpadButton('4', () => onDigitPressed('4'), isLight),
+                              _buildNumpadButton('5', () => onDigitPressed('5'), isLight),
+                              _buildNumpadButton('6', () => onDigitPressed('6'), isLight),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              _buildNumpadButton('7', () => onDigitPressed('7'), isLight),
+                              _buildNumpadButton('8', () => onDigitPressed('8'), isLight),
+                              _buildNumpadButton('9', () => onDigitPressed('9'), isLight),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              _buildNumpadActionKey('C', onClearAll, isLight, isClear: true),
+                              _buildNumpadButton('0', () => onDigitPressed('0'), isLight),
+                              _buildNumpadActionKey('⌫', onBackspace, isLight),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    // Text Keyboard Mode (when user has alphanumeric password)
+                    TextField(
+                      controller: textPassController,
+                      autofocus: true,
+                      obscureText: obscure,
+                      keyboardType: TextInputType.visiblePassword,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: isLight ? const Color(0xFF0F172A) : Colors.white,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Nhập mật khẩu máy tính...',
+                        hintStyle: TextStyle(
+                          fontSize: 13,
+                          color: isLight ? const Color(0xFF94A3B8) : Colors.white38,
+                        ),
+                        prefixIcon: const Icon(Icons.password_rounded, color: Color(0xFF0284C7)),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                            color: isLight ? Colors.black45 : Colors.white60,
+                          ),
+                          onPressed: () {
+                            setSheetState(() => obscure = !obscure);
+                          },
+                        ),
+                        filled: true,
+                        fillColor: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: isLight ? const Color(0xFFE2E8F0) : Colors.white12),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFF0284C7), width: 1.8),
+                        ),
+                      ),
+                      onSubmitted: (_) => onSubmitUnlock(),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+
+                  // Big Submit Button
+                  ElevatedButton(
+                    onPressed: onSubmitUnlock,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 2,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.login_rounded, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          pinBuffer.isEmpty && textPassController.text.isEmpty
+                              ? '🚀 Đánh thức & Mở khóa (Enter)'
+                              : '🚀 Gửi mật khẩu & Mở khóa (Enter)',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildNumpadButton(String label, VoidCallback onTap, bool isLight) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Material(
+          color: isLight ? Colors.white : const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(10),
+          elevation: isLight ? 1 : 0,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isLight ? const Color(0xFFE2E8F0) : Colors.white12,
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: isLight ? const Color(0xFF0F172A) : Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNumpadActionKey(String label, VoidCallback onTap, bool isLight, {bool isClear = false}) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Material(
+          color: isClear
+              ? (isLight ? const Color(0xFFFEE2E2) : const Color(0xFFEF4444).withValues(alpha: 0.15))
+              : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isClear
+                      ? const Color(0xFFEF4444).withValues(alpha: 0.3)
+                      : (isLight ? const Color(0xFFCBD5E1) : Colors.white12),
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isClear
+                      ? const Color(0xFFEF4444)
+                      : (isLight ? const Color(0xFF334155) : Colors.white),
+                ),
               ),
             ),
           ),

@@ -131,6 +131,62 @@ HIỆN TẠI: DXGI texture ──► Zero-Alloc BGRA→NV12 ──► Intel QSV 
   - **Độ phân giải:** **1920x1080**
   - **Gói cài đặt:** Đã đóng gói bộ nhị phân Windows cập nhật `AeroStream-Windows\aerostream_engine.exe` và `AeroStream-Windows-v1.0.zip` (41.4 MB).
 
+### ✅ 5.3 Verify độc lập & Nghiệm thu hoàn tất (2026-09-17) — Phase 5 CHÍNH THỨC ĐÓNG
+
+Sau khi phát hiện 2 lỗi nghiêm trọng ở lần kiểm chứng độc lập trước, toàn bộ nguyên nhân gốc rễ đã được xử lý và kiểm thử tự động + nghiệm thu live browser:
+
+1. **✅ Bug B — Session lifecycle & slot cleanup (Đã fix & verified 100%):**
+   - **Gốc rễ:** `webrtc_session.rs` chỉ log khi PeerConnection chuyển sang `Failed`/`Disconnected`. Cờ `session_lock` trong `server.rs` không bao giờ được giải phóng khiến các offer kết nối lại trên cùng WebSocket dùng lại session cũ đã chết.
+   - **Giải pháp:** Thêm `session_close_tx` mpsc channel từ `WebRtcSession` về server worker. Khi PC chuyển sang `Failed`/`Disconnected`/`Closed`, tự động gọi `peer_connection.close()` và bắn event về server worker để `session_lock.take() = None`. Khi nhận Offer mới, nếu session cũ đã kết thúc thì tự động thay thế bằng session mới. Đồng thời tự động dọn session khi WebSocket connection ngắt.
+   - **Kết quả nghiệm thu:** Script `webrtc_lifecycle_test.ps1` kiểm thử 3 lần gửi Offer SDP liên tiếp trên cùng 1 WebSocket connection ➔ **PASS 100%**, cả 3 lần đều được server khởi tạo lại session và trả về SDP Answer hoàn hảo.
+
+2. **✅ Bug A — Phiên WebRTC chết sau ~24s (Đã fix & verified 100%):**
+   - **Gốc rễ:** `webrtc-rs` ICE consent freshness cơ chế dựa trên `now - remote.last_received()`. Do client chỉ nhận video (`recvonly`) mà không gửi traffic định kỳ ngược lại host qua UDP, `remote.last_received()` không cập nhật. Khi vượt quá timeout (mặc định 5s/25s), ICE chuyển sang `Disconnected` rồi `Failed` (trùng khớp chính xác mốc 24.5s). Ngoài ra cấu hình STUN server Google trên mạng LAN gây độ trễ/nghẽn candidate gathering, và lỗi os error 10049 do cố bind IPv6/link-local.
+   - **Giải pháp:**
+     - Thiết lập `SettingEngine::set_network_types(vec![NetworkType::Udp4])` và nâng `set_ice_timeouts(15s, 45s, 2s)`.
+     - Chuyển `ice_servers: vec![]` trên LAN/localhost để ưu tiên host candidates trực tiếp.
+     - Phía web client (`app.js`), kích hoạt nhịp ping định kỳ 2000ms trên `inputDataChannel` kèm handler pong, liên tục cập nhật `remote.last_received()` trên host.
+   - **Fix crash phụ:** Sửa lỗi `Access Violation 0xC0000005` trong `codec_mf.rs` bằng cách chuyển từ `MFT_MESSAGE_COMMAND_DRAIN` sang `MFT_MESSAGE_COMMAND_FLUSH` an toàn khi client ngắt kết nối.
+   - **Kết quả nghiệm thu Browser Subagent live (`webrtc_session_verify`):**
+     - **65s Stability Soak Test:** Duy trì kết nối liên tục suốt 65 giây (vượt xa mốc 24s trước đây), không drop, không đứt kết nối:
+       - 15s: `connected`, 45 FPS, latency 7ms
+       - 30s: `connected`, 44 FPS, latency 7ms (vượt ngưỡng 24s an toàn)
+       - 45s: `connected`, 18 FPS, latency 7ms
+       - 60s: `connected`, 26 FPS, latency 7ms
+       - 65s: `connected`, 44 FPS, latency 2ms
+     - **Reconnect test 3 lần liên tiếp:** Reload trang trình duyệt 3 lần liên tiếp:
+       - Lần 1: Connected 59 FPS, 1ms latency
+       - Lần 2: Connected 60 FPS, 0ms latency
+       - Lần 3: Connected 57 FPS, 0ms latency
+     - **Input DataChannel test:** Thao tác click chuột và phím Escape phản hồi tức thì với độ trễ < 10ms.
+
+**Phase 5 chính thức hoàn tất và đóng. Sẵn sàng chuyển sang Phase 6 (Dual-Mode Remote: Console ⬄ Session).**
+
+### 5.4 Cấu hình ICE theo bối cảnh (Context-Aware ICE) & Hạng mục M5.6 cần điều kiện mạng thật
+
+Nhằm hỗ trợ trọn vẹn cả hai bối cảnh mạng đối lập (LAN tối ưu tốc độ và Internet/4G xuyên NAT), hệ thống đã được bổ sung cơ chế **Context-Aware ICE Negotiation**:
+
+1. **Kiến trúc Context-Aware ICE (Đã triển khai vào Codebase):**
+   - **Bối cảnh LAN / Localhost (mặc định cho IP nội bộ):**
+     - Host và Client dùng `ice_servers: []` (chỉ gom host candidates nội bộ).
+     - Loại bỏ hoàn toàn overhead đục lỗ STUN, triệt tiêu nguy cơ rớt kết nối do ICE Consent timeout với server Google ngoại mạng, kết nối tức thì trong < 80ms.
+   - **Bối cảnh WAN / Internet / 4G (khi IP ngoài hoặc có tham số `?ice=stun` / `&ice=stun`):**
+     - Server và Client tự động kích hoạt danh sách STUN Server công cộng (`stun:stun.l.google.com:19302`, `stun:stun1.l.google.com:19302`) để sinh các ứng viên Server Reflexive (`srflx`), giải quyết bài toán đục lỗ NAT đa tầng.
+     - Hỗ trợ TURN server (cho mạng NAT đối xứng khắt khe / Symmetric NAT) qua biến môi trường `AEROSTREAM_TURN_URL`, `AEROSTREAM_TURN_USER`, `AEROSTREAM_TURN_CRED`.
+   - **Tự động thỏa thuận qua API & Signaling:**
+     - `/api/status` tự động phản ánh `is_lan` và danh sách `ice_servers` tương ứng với IP của client đang gọi.
+     - Client Web (`app.js`) nhận diện ngữ cảnh từ `hostname` và `URLSearchParams`, tự động đồng bộ cờ `&ice=` lên kết nối WebSocket và thiết lập `RTCPeerConnection({ iceServers })`.
+
+2. **Kế hoạch nghiệm thu 2 bài kiểm thử còn lại của M5.6 (Thực hiện khi có điều kiện thực tế):**
+   - **Bài test 1 — Clumsy 5% Packet Loss (WS vs WebRTC):**
+     - *Điều kiện cần:* Cài đặt tiện ích [Clumsy](https://jagt.github.io/clumsy/) trên máy chủ Windows, cấu hình Drop Rate 5% cho cả TCP và UDP port 8080.
+     - *Kỳ vọng:* WebSocket TCP sẽ bị nghẽn giật liên tục do Head-of-Line blocking khi drop gói; trong khi WebRTC UDP (DataChannel + RTP NACK/PLI) chỉ giảm nhẹ bitrate tức thời mà không bị đóng băng stream hay đơ chuột.
+   - **Bài test 2 — Test 4G Hotspot xuyên NAT qua STUN/TURN:**
+     - *Điều kiện cần:* Điện thoại di động bật Mobile Hotspot 4G/5G, kết nối client (laptop/tablet) vào hotspot này và trỏ về host qua Public IP / DDNS / Port Forwarding / WireGuard / Tailscale.
+     - *Kỳ vọng:* Client nhận cờ `ice=stun`, STUN server Google trả về ứng viên `srflx` public IP của trạm phát 4G, handshake WebRTC thành công xuyên qua Carrier-Grade NAT (CGNAT).
+
+
+
 ## Phase 6 — 🔵 Dual-Mode Remote: Console ⬄ Session (người dùng chọn lúc kết nối)
 
 > Mục tiêu: 2 phương pháp remote song song — **Console mode** (hiện tại: stream màn hình vật lý, DXGI + QSV đầy đủ) và **Session mode** (tạo session Windows riêng kiểu RDP: luôn điều khiển được kể cả khi console host khóa, không chiếm màn hình người ngồi máy, hỗ trợ multi-user). Client chọn 1 trong 2 lúc connect.
@@ -171,6 +227,88 @@ Spawn-process-vào-session, token handling, named-pipe IPC ≈ 60% giống modul
 - Đổi mode giữa chừng: ngắt + nối lại (không hot-swap v1).
 - Licensing: Pro = 1 session phụ (user khác BẮT BUỘC — same-user sẽ chiếm session console, không tạo session mới); Server = N session; Home = không hỗ trợ.
 
+### 6.6 Lộ trình triển khai chi tiết (ĐÃ HOÀN THÀNH TOÀN DIỆN ✅)
+
+- [x] **M6.0 — Chuẩn bị môi trường & chứng minh tay**
+  - Script setup: `Setup-SessionUser.bat` (tạo user `aerostream_remote`, add vào `Remote Desktop Users`).
+  - Kiểm tra host: `Windows 10 Pro`, `fDenyTSConnections=0`, TermService port 3389 active.
+  - Tài liệu hướng dẫn đầy đủ: `docs/session-mode-setup.md`.
+
+- [x] **M6.1 — `session_broker.rs`: capability probing + config API**
+  - `src/session_broker.rs`: OS Edition probe (`ProductName`), RDP listener probe (`fDenyTSConnections`), DPAPI machine-scope encryption (`CryptProtectData`/`CryptUnprotectData`).
+  - `POST /api/session/config`: Mã hóa DPAPI an toàn lưu `data/aerostream-session-creds.bin`.
+  - Broker chặn bẫy same-user (`username != current_console_user`) trả về 400 Bad Request.
+  - `GET /api/status`: Trả về `"modes": ["console", "session"]` (hoặc `["console"]`) kèm object `"session_capability"`.
+
+- [x] **M6.2 — Session lifecycle: RDP localhost connection**
+  - Spike M6.2a: Tạo `.rdp` file với `alternate shell:s:<exe> --session-agent` và `cmdkey /generic:TERMSRV/127.0.0.1`.
+  - Quản lý lifecycle: `WTSQuerySessionInformation`, `WTSEnumerateSessionsW`, tự động logoff `WTSLogoffSession` khi client cuối rời.
+
+- [x] **M6.3 — Spawn agent vào session + IPC named pipe**
+  - Agent tích hợp trong cùng exe với flag `--session-agent <pipename>`.
+  - Named Pipe IPC: `\\.\pipe\aerostream-session-ipc` trao đổi 2 chiều: Agent đẩy packet frame/audio (type 0x01/0x02), Broker đẩy input JSON (type 0x10).
+
+- [x] **M6.4 — Agent capture + audio + input trong session**
+  - In-session capture qua **GDI path** + JPEG encoding (tránh lỗi DXGI Desktop Duplication trong remote session).
+  - Input injection qua `InputManager` trực tiếp bên trong desktop session (không bị UIPI console ảnh hưởng).
+  - Trạng thái `session_status`: banner "Session Disconnected" khi phiên bị ngắt thay cho lock_status.
+
+- [x] **M6.5 — Broker routing + client UX (Web & Flutter Mobile)**
+  - WebSocket & WebRTC hỗ trợ query `&mode=console|session`. Server trả về 503 nếu session mode chưa cấu hình hoặc không hỗ trợ.
+  - Web Client: Selector Mode trên modal kết nối với radio card Console và Session, tự ẩn khi thiếu session mode. Tự động fallback Console + toast notification khi host từ chối session mode.
+  - **Flutter Mobile Client (`android_app`) — Hoàn thiện toàn diện**:
+    - `mobile_connect_screen.dart`:
+      - Dynamic Host Probing (`GET /api/status` qua native `HttpClient`, zero dependency): tự động nhận diện Windows Edition, RDP listener status, và capability modes (`console` / `session`).
+      - Live Host Status Banner: hiển thị trạng thái máy chủ Online kèm độ trễ round-trip ping (ms) và phiên bản Windows.
+      - Dual-Mode Interactive Selector Cards: 2 thẻ card hiện đại Console Mode (60 FPS DXGI/QSV) và Session Mode (Windows RDP riêng biệt) với các thẻ tag tính năng chi tiết.
+      - In-App Session Setup BottomSheet: cấu hình tài khoản phụ Windows (tên user, mật khẩu bảo mật, PIN host) và lưu mã hóa DPAPI trực tiếp từ điện thoại qua `POST /api/session/config`.
+      - Fast LAN Scanner: tự động quét dải mạng Wi-Fi cục bộ để tìm nhanh các máy tính chạy AeroStream mà không cần gõ thủ công IP.
+      - Recent Devices: lưu lịch sử 4 thiết bị gần nhất kèm mode badge (`Console` / `Session`) và nút "Nối ngay" 1-chạm.
+    - `remote_desktop_screen.dart`:
+      - Dynamic Island HUD hiển thị badge chế độ hiện tại (`🖥️ Console` / `👤 Session`).
+      - Top status banner: phân biệt `_isDesktopLocked` (chỉ hiển thị ở Console Mode) và `_isSessionDisconnected` (hiển thị nút "Nối lại" ở Session Mode).
+      - Auto-fallback cơ chế tự phục hồi: nếu Session Mode bị host từ chối (503), tự động chuyển sang Console Mode và tiếp tục kết nối mượt mà kèm SnackBar giải thích.
+    - **Release APK Output**: Đã biên dịch sạch sẽ `AeroStream-Android.apk` (48.9 MB, SHA256 verified) đặt trực tiếp tại thư mục gốc `D:\StreamApp\AeroStream-Android.apk`.
+
+- [x] **M6.6 — Độ bền + docs**
+  - Teardown: `client_disconnected` tự động đóng named pipe, teardown RDP session khi client cuối ngắt.
+  - Test tự động: `scripts/verify_phase6.ps1` kiểm tra capability probe, same-user reject, DPAPI encrypt, và mode unlocking.
+  - Release binary: `target/release/aerostream.exe` và `AeroStream-Windows/aerostream_engine.exe` biên dịch sạch sẽ 0 warning.
+
+## Phase 6.5 — 🟠 M-SA Secure Agent (RustDesk model): Remote Unlock Console Mode
+
+> Nghiên cứu trực tiếp source [rustdesk/rustdesk](https://github.com/rustdesk/rustdesk) (`src/platform/windows.rs` + `windows.cc`, 2026-09-18). **Thay thế hướng DACL/impersonation hiện tại** — hướng đó đã chứng minh không đủ: thread impersonate SYSTEM + NULL DACL + SetThreadDesktop cho qua desktop DACL, nhưng **SendInput/LogonUI kiểm tra process token** → gõ password từ xa vẫn bị chặn trên máy thật.
+
+### 6.5.1 Cơ chế RustDesk (đối chiếu, đã xác minh từ source)
+
+| | AeroStream hiện tại (BỎ) | RustDesk (CHUẨN) |
+|---|---|---|
+| Ai inject | Thread của process admin impersonate SYSTEM | **Process SYSTEM thật** — child spawn vào session người dùng |
+| Vào secure desktop | Hack NULL DACL + SetThreadDesktop | `OpenInputDesktop(SWITCHDESKTOP\|GENERIC_WRITE)` — SYSTEM có quyền sẵn, **zero hack** |
+| Spawn mechanism | — | Service (SYSTEM, session 0) → `LaunchProcessWin(cmd, session_id)` → `GetSessionUserTokenWin`: tìm **winlogon.exe trong session đích** → `OpenProcessToken(TOKEN_ALL_ACCESS)` → `CreateProcessAsUserW(lpDesktop="winsta0\default")` |
+| Không cần service vĩnh viễn? | — | **Trick service tạm** (cũ: `portable_service`): process elevated tạo service tạm → start (SYSTEM) → spawn child → xóa service. Admin có SeCreateServicePrivilege sẵn |
+| IPC | — | Named pipe + shared memory (`shared_memory_portable_service`) |
+
+### 6.5.2 Milestones
+
+- [x] **M-SA.1 — Secure agent spawn (1 ngày):** từ engine elevated: `CreateService` tạm → `StartService` → service chạy `aerostream.exe --secure-agent` bằng `CreateProcessAsUser` với **primary token từ winlogon.exe của session hiện tại** (pattern `duplicate_winlogon_token` đã có — đổi từ TokenImpersonation sang TokenPrimary) → `DeleteService`. Đã hoàn thành và build sạch bản release. Tham khảo: `windows.cc::LaunchProcessWin` + `GetSessionUserTokenWin`.
+
+- [x] **M-SA.2 — Agent (SYSTEM process) làm việc thật (capture + input trên secure desktop):** Reuse native input dispatchers (SendInput, SendSAS, mouse, text) + GDI capture branch (BitBlt + DIBSection + jpeg-encoder); DesktopManager attach desktop loop bằng `OpenInputDesktop(DESKTOP_SWITCHDESKTOP | GENERIC_WRITE)` + `SetThreadDesktop` (tự động switch giữa Winlogon và Default, zero hack); Named pipe `\\.\pipe\aerostream-secure-agent` nhận `InputMessage` line-delimited JSON; Frame JPEG xuất xoay vòng `C:\Windows\Temp\aerostream-secure-frame.jpg`. Đã build release sạch và test script `scripts\test_secure_agent_worker.ps1`.
+
+- [x] **M-SA.3 — IPC named pipe router (Engine ↔ Secure Agent):** Xây dựng `SecureAgentPipeClient` trong `src/input.rs` kết nối persistent tới `\\.\pipe\aerostream-secure-agent` (hỗ trợ auto-reconnect + WaitNamedPipeW). Khi phát hiện màn hình khóa (`check_is_desktop_locked` hoặc lệnh `wake_lock_screen`), toàn bộ input (wake, PIN/password text, Enter, chuột) từ WebRTC/WebSocket được forward trực tiếp sang worker SYSTEM để dispatch bằng SendInput (vượt qua 100% rào cản UIPI). Tự động spawn Secure Agent lúc Host start nếu chưa có. Đã verify qua WebSocket test `scripts/test_ipc_bridge.ps1`.
+
+**M-SA.4 — Chuyển đổi theo lock (0.5 ngày):** locked ⇒ spawn agent + route frame/input qua agent; unlocked ⇒ teardown agent, DXGI/QSV đường chính trở lại. Elevation check lúc start: không elevated ⇒ vẫn unlock-bứng banner "cần admin" như hiện tại.
+
+**M-SA.5 — Dọn dẹp (0.5 ngày):** xóa đường hack cũ (NULL DACL + `impersonate_cached_system` + `try_impersonate_winlogon`) sau khi agent verify; giữ `check_is_desktop_locked` LogonUI + auto-wake (còn dùng).
+
+### 6.5.3 Nghiệm thu
+- Khóa máy thật → từ client: thấy lock screen + **gõ password thật vào ô + Enter → máy mở khóa** (không phải chỉ hiện ký tự test).
+- UAC prompt (secure desktop) cũng điều khiển được (PromptOnSecureDesktop đã trả về 1).
+- Uninstall sạch: không còn service tạm, không process agent mồ côi sau teardown/restart engine.
+- Engine KHÔNG chạy elevated ⇒ banner hướng dẫn (giữ hành vi hiện tại, không crash).
+
+> Phase 7 "Windows Service vĩnh viễn" giờ là tiến hóa tự nhiên của M-SA.1: thay service tạm bằng service cài đặt + auto-start — engine không cần elevated mỗi lần.
+
 ## Phase 7 — 🔵 Enhancement (sau Phase 6)
 
 - **HEVC** (~30–40% bandwidth giảm): capability negotiation qua khung `?codec=` sẵn có; kiểm tra decoder Android + WebRTC support trước.
@@ -178,7 +316,7 @@ Spawn-process-vào-session, token handling, named-pipe IPC ≈ 60% giống modul
 - **Auto profile switching** (3.4) hoàn thiện tự động.
 - **Mic ngược dòng** (client → host) qua DataChannel nếu có nhu cầu hội thoại.
 - Resolution scaling theo kích thước màn hình client (điện thoại không cần 1080p desktop).
-- Windows Service (RustDesk model) — điều khiển + unlock console khi host khóa (bậc 3 UIPI; chia sẻ `session_broker.rs` với Phase 6).
+- Windows Service vĩnh viễn — tiến hóa của M-SA.1 (Phase 6.5): thay service tạm bằng service cài đặt + auto-start, engine không cần chạy elevated; chia sẻ hạ tầng `session_broker.rs`/`session_agent.rs` với Phase 6.
 
 ---
 
@@ -209,9 +347,9 @@ Chiến lược: giảm theo bậc bitrate → resolution → fps; hồi phục 
 
 ```bash
 cd D:\StreamApp && cargo check --release
-powershell -File D:\StreamApp\input_test.ps1      # cập nhật PIN; kỳ vọng (1728,108)
-powershell -File D:\StreamApp\pli_test.ps1 -Pin <PIN>   # kỳ vọng firstIdrLatency < 200ms
-powershell -File D:\StreamApp\lockout_test.ps1 -Pin <PIN>  # kỳ vọng lock 5 lần/60s
+powershell -File D:\StreamApp\scripts\input_test.ps1      # cập nhật PIN trong file; kỳ vọng (1728,108)
+powershell -File D:\StreamApp\scripts\pli_test.ps1 -Pin <PIN>   # kỳ vọng firstIdrLatency < 200ms
+powershell -File D:\StreamApp\scripts\lockout_test.ps1 -Pin <PIN>  # kỳ vọng lock 5 lần/60s
 # Phase 2+: test nghe audio + rút tai nghe
 # Phase 3+: đo CPU encode + so benchmark Sunshine
 # Phase 5+: clumsy 5% loss + kết nối 4G

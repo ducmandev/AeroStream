@@ -380,8 +380,7 @@ impl MediaFoundationH264Encoder {
 impl Drop for MediaFoundationH264Encoder {
     fn drop(&mut self) {
         unsafe {
-            let _ = self.mft.ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
-            let _ = self.mft.ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
+            let _ = self.mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
         }
     }
 }

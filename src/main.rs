@@ -10,7 +10,10 @@ mod config;
 mod debug_log;
 mod gui;
 mod input;
+mod secure_agent;
 mod server;
+mod session_agent;
+mod session_broker;
 mod state;
 mod webrtc_session;
 
@@ -30,6 +33,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::panic::set_hook(Box::new(|info| {
         crate::debug_log::log_gui(&format!("PANIC: {:?}", info));
     }));
+
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--secure-svc") {
+        return crate::secure_agent::run_secure_service();
+    }
+    if args.iter().any(|a| a == "--secure-agent") {
+        return crate::secure_agent::run_secure_agent();
+    }
+    if args.iter().any(|a| a == "--spawn-secure-agent") {
+        return crate::secure_agent::run_spawn_cli();
+    }
+
+    if let Some(pos) = args.iter().position(|a| a == "--session-agent") {
+        let pipe_name = args.get(pos + 1).cloned().unwrap_or_else(|| "aerostream-session-ipc".to_string());
+        crate::clock::init_clock();
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        return rt.block_on(crate::session_agent::run_session_agent(pipe_name));
+    }
+
     let _ = rustls::crypto::ring::default_provider().install_default();
     crate::clock::init_clock();
     log_gui("main() started with QPC clock");
@@ -40,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .append(true)
         .open("aerostream.log")
     {
+        use tracing_subscriber::util::SubscriberInitExt;
         let subscriber = tracing_subscriber::fmt()
             .with_env_filter(
                 tracing_subscriber::EnvFilter::try_from_default_env()
@@ -48,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_writer(std::sync::Mutex::new(file))
             .with_ansi(false)
             .finish();
-        let _ = tracing::subscriber::set_global_default(subscriber);
+        subscriber.init();
     }
     tracing::info!("=== AeroStream Engine Starting ===");
     unsafe {
@@ -67,9 +92,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             windows_sys::Win32::Foundation::CloseHandle(token);
             if ok != 0 && elevation.TokenIsElevated != 0 {
-                tracing::info!("Privilege Level: Elevated Administrator (Full UIPI bypass for elevated apps & Task Manager)");
+                enable_token_privileges();
+                tracing::info!("Privilege Level: Elevated Administrator (Full UIPI bypass & SeDebugPrivilege enabled for lock screen & elevated apps)");
+
+                // Auto-spawn or verify SYSTEM Secure Agent worker for lock screen remote unlock
+                std::thread::spawn(|| {
+                    use windows_sys::Win32::Foundation::*;
+                    use windows_sys::Win32::Storage::FileSystem::*;
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    let pipe_name: Vec<u16> = crate::secure_agent::AGENT_PIPE_NAME
+                        .encode_utf16()
+                        .chain(std::iter::once(0))
+                        .collect();
+                    unsafe {
+                        let h = CreateFileW(
+                            pipe_name.as_ptr(),
+                            GENERIC_READ | GENERIC_WRITE,
+                            0,
+                            std::ptr::null_mut(),
+                            OPEN_EXISTING,
+                            0,
+                            std::ptr::null_mut(),
+                        );
+                        if h != INVALID_HANDLE_VALUE {
+                            CloseHandle(h);
+                            tracing::info!("[SECURE-AGENT] Existing SYSTEM Secure Agent detected on named pipe.");
+                            return;
+                        }
+                    }
+                    tracing::info!("[SECURE-AGENT] No active Secure Agent detected. Auto-spawning SYSTEM worker into session...");
+                    match crate::secure_agent::spawn_secure_agent() {
+                        Ok(_) => tracing::info!("[SECURE-AGENT] Auto-spawned SYSTEM Secure Agent successfully!"),
+                        Err(e) => tracing::warn!("[SECURE-AGENT] Auto-spawn Secure Agent failed: {}", e),
+                    }
+                });
             } else {
-                tracing::info!("Privilege Level: Standard User (UIPI restricts remote clicks on Task Manager / UAC; run as Administrator to control elevated windows)");
+                tracing::info!("Privilege Level: Standard User (Run Unlock-UIPI.bat or Run as Administrator to bypass UIPI and unlock login screens)");
             }
         }
     }
@@ -272,4 +330,85 @@ fn generate_self_signed_tls(local_ip: &str) -> Result<(Vec<u8>, Vec<u8>), Box<dy
     tracing::info!("Generated and saved persistent self-signed TLS certificate to {} and {}", cert_p.display(), key_p.display());
 
     Ok((cert_pem, key_pem))
+}
+
+unsafe fn enable_token_privileges() {
+    use windows_sys::Win32::Foundation::*;
+    use windows_sys::Win32::Security::*;
+    use windows_sys::Win32::System::Threading::*;
+
+    let mut token: HANDLE = std::ptr::null_mut();
+    if OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut token) != 0 {
+        for priv_name in &[
+            "SeDebugPrivilege",
+            "SeImpersonatePrivilege",
+            "SeTcbPrivilege",
+            "SeAssignPrimaryTokenPrivilege",
+            "SeIncreaseQuotaPrivilege",
+        ] {
+            let wide: Vec<u16> = priv_name.encode_utf16().chain(std::iter::once(0)).collect();
+            let mut luid: LUID = std::mem::zeroed();
+            if LookupPrivilegeValueW(std::ptr::null_mut(), wide.as_ptr(), &mut luid) != 0 {
+                let mut tp = TOKEN_PRIVILEGES {
+                    PrivilegeCount: 1,
+                    Privileges: [LUID_AND_ATTRIBUTES {
+                        Luid: luid,
+                        Attributes: SE_PRIVILEGE_ENABLED,
+                    }],
+                };
+                let _ = AdjustTokenPrivileges(
+                    token,
+                    0,
+                    &mut tp as *mut _ as *mut _,
+                    std::mem::size_of::<TOKEN_PRIVILEGES>() as u32,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+            }
+        }
+        CloseHandle(token);
+    }
+    ensure_sas_policy();
+}
+
+unsafe fn ensure_sas_policy() {
+    use windows_sys::Win32::System::Registry::*;
+    let mut h_key: HKEY = std::ptr::null_mut();
+    let subkey: Vec<u16> = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\0"
+        .encode_utf16()
+        .collect();
+    if RegCreateKeyExW(
+        HKEY_LOCAL_MACHINE,
+        subkey.as_ptr(),
+        0,
+        std::ptr::null_mut(),
+        0,
+        KEY_SET_VALUE,
+        std::ptr::null_mut(),
+        &mut h_key,
+        std::ptr::null_mut(),
+    ) == 0 {
+        let policies: [(&str, u32); 4] = [
+            ("SoftwareSASGeneration\0", 3), // 3 = Services and Ease of Access applications (enables SendSAS)
+            ("EnableSecureUIAPaths\0", 0),  // 0 = Allow UIAccess apps from any directory (not just Program Files)
+            ("EnableUIADesktopToggle\0", 1), // 1 = Allow UIAccess apps to toggle desktop and interact with secure desktop
+            // PromptOnSecureDesktop: keep the OS default (1). Earlier builds set 0, which lowers
+            // UAC security system-wide and does NOT help lock-screen unlock (lock screen is not a UAC prompt).
+            ("PromptOnSecureDesktop\0", 1),
+        ];
+
+        for (name, val) in policies {
+            let val_name: Vec<u16> = name.encode_utf16().collect();
+            let _ = RegSetValueExW(
+                h_key,
+                val_name.as_ptr(),
+                0,
+                REG_DWORD,
+                &val as *const _ as *const u8,
+                std::mem::size_of::<u32>() as u32,
+            );
+        }
+        RegCloseKey(h_key);
+        tracing::info!("Configured system SAS, UIPI, and SecureDesktop policies successfully");
+    }
 }

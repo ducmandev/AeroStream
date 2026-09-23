@@ -4,6 +4,7 @@ class RecentConnection {
   final String pin;
   final String deviceName;
   final DateTime lastUsed;
+  final String mode;
 
   RecentConnection({
     required this.ip,
@@ -11,6 +12,7 @@ class RecentConnection {
     required this.pin,
     required this.deviceName,
     required this.lastUsed,
+    this.mode = 'console',
   });
 
   Map<String, dynamic> toJson() => {
@@ -19,6 +21,7 @@ class RecentConnection {
     'pin': pin,
     'deviceName': deviceName,
     'lastUsed': lastUsed.toIso8601String(),
+    'mode': mode,
   };
 
   factory RecentConnection.fromJson(Map<String, dynamic> json) => RecentConnection(
@@ -27,5 +30,6 @@ class RecentConnection {
     pin: json['pin'] as String? ?? '',
     deviceName: json['deviceName'] as String? ?? 'Windows PC',
     lastUsed: DateTime.tryParse(json['lastUsed'] as String? ?? '') ?? DateTime.now(),
+    mode: json['mode'] as String? ?? 'console',
   );
 }

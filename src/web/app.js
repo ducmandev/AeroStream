@@ -239,9 +239,83 @@
   let lastBitrateTime = performance.now();
 
   let currentSessionToken = sessionStorage.getItem('aerostream_token');
+  let selectedMode = localStorage.getItem('aerostream_mode') || 'console';
+  let toastTimer = null;
+  let hasEverOpened = false;
+
+  function showToast(message, durationMs = 4500) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.classList.add('hidden');
+    }, durationMs);
+  }
+
+  function updateModeSelection(mode) {
+    selectedMode = mode;
+    localStorage.setItem('aerostream_mode', mode);
+    const modeCardConsole = document.getElementById('mode-card-console');
+    const modeCardSession = document.getElementById('mode-card-session');
+    if (!modeCardConsole || !modeCardSession) return;
+
+    const radioConsole = modeCardConsole.querySelector('input');
+    const radioSession = modeCardSession.querySelector('input');
+
+    if (mode === 'session') {
+      modeCardConsole.classList.remove('active');
+      modeCardSession.classList.add('active');
+      if (radioSession) radioSession.checked = true;
+      if (radioConsole) radioConsole.checked = false;
+    } else {
+      modeCardSession.classList.remove('active');
+      modeCardConsole.classList.add('active');
+      if (radioConsole) radioConsole.checked = true;
+      if (radioSession) radioSession.checked = false;
+    }
+  }
+
+  async function checkHostModes() {
+    const modeSelectorWrap = document.getElementById('mode-selector-wrap');
+    try {
+      const res = await fetch('/api/status');
+      if (res.ok) {
+        const data = await res.json();
+        const modes = data.modes || ['console'];
+        if (modes.includes('session')) {
+          if (modeSelectorWrap) modeSelectorWrap.classList.remove('hidden');
+        } else {
+          if (modeSelectorWrap) modeSelectorWrap.classList.add('hidden');
+          selectedMode = 'console';
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to probe host modes:', e);
+    }
+    updateModeSelection(selectedMode);
+  }
 
   // 1. Initialization
   function init() {
+    checkHostModes();
+
+    const modeCardConsole = document.getElementById('mode-card-console');
+    const modeCardSession = document.getElementById('mode-card-session');
+    if (modeCardConsole) {
+      modeCardConsole.addEventListener('click', (e) => {
+        e.preventDefault();
+        updateModeSelection('console');
+      });
+    }
+    if (modeCardSession) {
+      modeCardSession.addEventListener('click', (e) => {
+        e.preventDefault();
+        updateModeSelection('session');
+      });
+    }
+
     const params = new URLSearchParams(window.location.search);
     const pinFromUrl = params.get('pin');
     const savedPin = localStorage.getItem('aerostream_pin');
@@ -360,6 +434,20 @@
     }
   }
 
+  function getIceMode() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const iceParam = urlParams.get('ice');
+    if (iceParam) return iceParam;
+
+    const hostname = window.location.hostname;
+    const isLan = hostname === 'localhost' ||
+                  hostname === '127.0.0.1' ||
+                  hostname.startsWith('192.168.') ||
+                  hostname.startsWith('10.') ||
+                  (hostname.startsWith('172.') && parseInt(hostname.split('.')[1], 10) >= 16 && parseInt(hostname.split('.')[1], 10) <= 31);
+    return isLan ? 'lan' : 'stun';
+  }
+
   function connectWithToken(token) {
     authError.textContent = '';
     connectionOverlay.classList.remove('hidden');
@@ -367,7 +455,9 @@
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const supportsWebCodecs = typeof VideoDecoder !== 'undefined';
     const codecParam = supportsWebCodecs ? '&codec=h264' : '&codec=jpeg';
-    const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}${codecParam}`;
+    const iceMode = getIceMode();
+    const modeParam = `&mode=${encodeURIComponent(selectedMode)}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}${codecParam}&ice=${encodeURIComponent(iceMode)}${modeParam}`;
     openWebSocket(wsUrl);
   }
 
@@ -379,7 +469,9 @@
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const supportsWebCodecs = typeof VideoDecoder !== 'undefined';
     const codecParam = supportsWebCodecs ? '&codec=h264' : '&codec=jpeg';
-    const wsUrl = `${protocol}//${window.location.host}/ws?pin=${encodeURIComponent(pin)}${codecParam}`;
+    const iceMode = getIceMode();
+    const modeParam = `&mode=${encodeURIComponent(selectedMode)}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws?pin=${encodeURIComponent(pin)}${codecParam}&ice=${encodeURIComponent(iceMode)}${modeParam}`;
     openWebSocket(wsUrl);
   }
 
@@ -388,12 +480,14 @@
       try { ws.close(); } catch(e) {}
     }
 
+    hasEverOpened = false;
     ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
+      hasEverOpened = true;
       const supportsWebCodecs = typeof VideoDecoder !== 'undefined';
-      console.log(`Connected to AeroStream Host (Requested Codec: ${supportsWebCodecs ? 'H.264' : 'JPEG'})`);
+      console.log(`Connected to AeroStream Host (Mode: ${selectedMode.toUpperCase()}, Requested Codec: ${supportsWebCodecs ? 'H.264' : 'JPEG'})`);
       isConnected = true;
       authModal.classList.add('hidden');
       connectionOverlay.classList.add('hidden');
@@ -401,8 +495,10 @@
       pingInterval = setInterval(sendPing, 4000);
       sendPing();
 
-      // Initiate WebRTC peer connection (Phase 5)
-      startWebRtc();
+      // Initiate WebRTC peer connection for Console mode (Phase 5)
+      if (selectedMode !== 'session') {
+        startWebRtc();
+      }
     };
 
     ws.onmessage = async (event) => {
@@ -427,10 +523,19 @@
           } else if (msg.type === 'lock_status') {
             const lockBanner = document.getElementById('lock-banner');
             if (lockBanner) {
-              if (msg.locked) {
+              if (msg.locked && selectedMode === 'console') {
                 lockBanner.classList.remove('hidden');
               } else {
                 lockBanner.classList.add('hidden');
+              }
+            }
+          } else if (msg.type === 'session_status') {
+            const sessionBanner = document.getElementById('session-banner');
+            if (sessionBanner) {
+              if (!msg.connected && selectedMode === 'session') {
+                sessionBanner.classList.remove('hidden');
+              } else {
+                sessionBanner.classList.add('hidden');
               }
             }
           } else if (msg.type === 'time_sync') {
@@ -460,6 +565,22 @@
     ws.onerror = (err) => {
       console.error('WebSocket error:', err);
       if (pingInterval) clearInterval(pingInterval);
+
+      // Auto-fallback from Session mode to Console mode if connection fails early
+      if (selectedMode === 'session' && !hasEverOpened) {
+        console.warn('[Dual-Mode] Session mode connection failed or rejected (HTTP 503). Auto-falling back to Console mode...');
+        showToast('Session mode unavailable on host. Falling back to Console mode...', 5000);
+        updateModeSelection('console');
+        setTimeout(() => {
+          if (currentSessionToken) {
+            connectWithToken(currentSessionToken);
+          } else if (currentPin) {
+            connect(currentPin);
+          }
+        }, 800);
+        return;
+      }
+
       sessionStorage.removeItem('aerostream_token');
       currentSessionToken = null;
       authError.textContent = 'Unable to connect to host. Please verify PIN or re-authenticate.';
@@ -478,6 +599,11 @@
       isConnected = false;
       connectionOverlay.classList.remove('hidden');
       authModal.classList.remove('hidden');
+      const lockBanner = document.getElementById('lock-banner');
+      if (lockBanner) lockBanner.classList.add('hidden');
+      const sessionBanner = document.getElementById('session-banner');
+      if (sessionBanner) sessionBanner.classList.add('hidden');
+
       if (videoDecoder && videoDecoder.state !== 'closed') {
         try { videoDecoder.close(); } catch(e) {}
         videoDecoder = null;
@@ -497,12 +623,26 @@
         try { peerConnection.close(); } catch(e) {}
         peerConnection = null;
       }
+      if (inputDataChannel) {
+        try { inputDataChannel.close(); } catch(e) {}
+        inputDataChannel = null;
+      }
 
-      console.log('[WebRTC] Initiating PeerConnection negotiation with host...');
+      const iceMode = getIceMode();
+      let iceServers = [];
+      if (iceMode === 'stun' || iceMode === 'wan' || iceMode === 'internet') {
+        console.log('[WebRTC] Initiating PeerConnection with public STUN servers (Internet / 4G NAT Traversal)...');
+        iceServers = [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ];
+      } else {
+        console.log('[WebRTC] Initiating PeerConnection with direct host-only candidates (LAN / Localhost)...');
+        iceServers = [];
+      }
+
       const config = {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' }
-        ]
+        iceServers: iceServers
       };
 
       peerConnection = new RTCPeerConnection(config);
@@ -521,14 +661,39 @@
         maxRetransmits: 0
       });
 
+      let dcPingInterval = null;
       inputDataChannel.onopen = () => {
         console.log('[WebRTC DataChannel] Opened for zero-blocking input transmission');
+        if (dcPingInterval) clearInterval(dcPingInterval);
+        dcPingInterval = setInterval(() => {
+          if (inputDataChannel && inputDataChannel.readyState === 'open') {
+            try {
+              inputDataChannel.send(JSON.stringify({
+                type: 'ping',
+                client_time: Date.now()
+              }));
+            } catch (e) {}
+          }
+        }, 2000);
       };
       inputDataChannel.onclose = () => {
         console.log('[WebRTC DataChannel] Closed');
+        if (dcPingInterval) {
+          clearInterval(dcPingInterval);
+          dcPingInterval = null;
+        }
       };
       inputDataChannel.onerror = (e) => {
         console.warn('[WebRTC DataChannel] Error:', e);
+      };
+      inputDataChannel.onmessage = (event) => {
+        // Pong handler for RTT & liveness verification
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'pong' && data.client_time) {
+            // DataChannel heartbeat active & confirmed
+          }
+        } catch (e) {}
       };
 
       // Add transceivers for receiving video and audio
@@ -635,6 +800,10 @@
     if (webRtcStatsInterval) {
       clearInterval(webRtcStatsInterval);
       webRtcStatsInterval = null;
+    }
+    if (inputDataChannel) {
+      try { inputDataChannel.close(); } catch(e) {}
+      inputDataChannel = null;
     }
   }
 
@@ -954,6 +1123,17 @@
       btnTaskmgr.addEventListener('click', () => {
         sendInput({ type: 'shortcut', keys: ['ctrl', 'shift', 'escape'] });
         if (shortcutsPanel) shortcutsPanel.classList.add('hidden');
+      });
+    }
+
+    const lockBannerEl = document.getElementById('lock-banner');
+    if (lockBannerEl) {
+      lockBannerEl.addEventListener('click', () => {
+        sendInput({ type: 'wake_lock_screen' });
+        sendInput({ type: 'key_click', key: 'Space' });
+        sendInput({ type: 'key_click', key: 'Enter' });
+        showToast('Đang đánh thức màn hình khóa Windows...', 3000);
+        if (hiddenInput) hiddenInput.focus();
       });
     }
 

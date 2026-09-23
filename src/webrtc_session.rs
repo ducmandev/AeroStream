@@ -6,6 +6,7 @@ use tracing::{debug, info};
 
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264, MIME_TYPE_OPUS};
+use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
@@ -31,12 +32,25 @@ pub struct WebRtcSession {
 }
 
 impl WebRtcSession {
+    pub fn connection_state(&self) -> RTCPeerConnectionState {
+        self.peer_connection.connection_state()
+    }
+
+    pub fn is_closed_or_failed(&self) -> bool {
+        let state = self.peer_connection.connection_state();
+        state == RTCPeerConnectionState::Failed
+            || state == RTCPeerConnectionState::Closed
+            || state == RTCPeerConnectionState::Disconnected
+    }
+
     pub async fn new(
         ws_sender: mpsc::Sender<String>,
         h264_receiver: broadcast::Receiver<bytes::Bytes>,
         audio_receiver: broadcast::Receiver<bytes::Bytes>,
         request_h264_keyframe: Arc<AtomicBool>,
         input_manager: Arc<InputManager>,
+        session_close_tx: mpsc::Sender<()>,
+        ice_servers: Vec<RTCIceServer>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         // 1. Configure MediaEngine with H.264 & Opus codecs
         let mut media_engine = MediaEngine::default();
@@ -46,25 +60,36 @@ impl WebRtcSession {
         let mut registry = Registry::new();
         registry = register_default_interceptors(registry, &mut media_engine)?;
 
-        // 3. Build WebRTC API instance
+        // 3. Configure SettingEngine with generous ICE timeouts for low-latency streaming
+        let mut setting_engine = SettingEngine::default();
+        setting_engine.set_network_types(vec![webrtc::ice::network_type::NetworkType::Udp4]);
+        setting_engine.set_ice_timeouts(
+            Some(Duration::from_secs(15)), // disconnected_timeout (15s instead of default 5s)
+            Some(Duration::from_secs(45)), // failed_timeout (45s instead of default 25s)
+            Some(Duration::from_secs(2)),  // keepalive_interval (2s STUN consent checks)
+        );
+
+        // 4. Build WebRTC API instance
         let api = APIBuilder::new()
             .with_media_engine(media_engine)
             .with_interceptor_registry(registry)
+            .with_setting_engine(setting_engine)
             .build();
 
-        // 4. Configure ICE servers (Google Public STUN)
+        // 5. Configure ICE servers (context-aware: empty for LAN/localhost, STUN/TURN for WAN/4G)
+        info!(
+            "[WebRTC] Initializing PeerConnection with {} ICE server(s)",
+            ice_servers.len()
+        );
         let config = RTCConfiguration {
-            ice_servers: vec![RTCIceServer {
-                urls: vec!["stun:stun.l.google.com:19302".to_string()],
-                ..Default::default()
-            }],
+            ice_servers,
             ..Default::default()
         };
 
-        // 5. Create PeerConnection
+        // 6. Create PeerConnection
         let peer_connection = Arc::new(api.new_peer_connection(config).await?);
 
-        // 6. Create Video Track (H.264)
+        // 7. Create Video Track (H.264)
         let video_track = Arc::new(TrackLocalStaticSample::new(
             RTCRtpCodecCapability {
                 mime_type: MIME_TYPE_H264.to_string(),
@@ -78,7 +103,7 @@ impl WebRtcSession {
             .add_track(Arc::clone(&video_track) as Arc<dyn TrackLocal + Send + Sync>)
             .await?;
 
-        // 7. Handle RTCP PLI/FIR feedback on video track to trigger IDR keyframes
+        // 8. Handle RTCP PLI/FIR feedback on video track to trigger IDR keyframes
         let rtcp_keyframe_flag = Arc::clone(&request_h264_keyframe);
         tokio::spawn(async move {
             while let Ok((rtcp_packets, _)) = video_transceiver.read_rtcp().await {
@@ -94,7 +119,7 @@ impl WebRtcSession {
             }
         });
 
-        // 8. Create Audio Track (Opus 48kHz stereo)
+        // 9. Create Audio Track (Opus 48kHz stereo)
         let audio_track = Arc::new(TrackLocalStaticSample::new(
             RTCRtpCodecCapability {
                 mime_type: MIME_TYPE_OPUS.to_string(),
@@ -108,7 +133,7 @@ impl WebRtcSession {
             .add_track(Arc::clone(&audio_track) as Arc<dyn TrackLocal + Send + Sync>)
             .await?;
 
-        // 9. Setup local ICE Candidate forwarding to WebSocket
+        // 10. Setup local ICE Candidate forwarding to WebSocket
         let ws_sender_ice = ws_sender.clone();
         peer_connection.on_ice_candidate(Box::new(move |candidate: Option<RTCIceCandidate>| {
             let ws_sender = ws_sender_ice.clone();
@@ -126,10 +151,36 @@ impl WebRtcSession {
             })
         }));
 
-        // 10. PeerConnection state change monitoring
+        // 11. PeerConnection state change monitoring & session lifecycle cleanup (Bug B fix)
+        let pc_state_clone = Arc::clone(&peer_connection);
+        let close_tx = session_close_tx.clone();
         peer_connection.on_peer_connection_state_change(Box::new(move |state: RTCPeerConnectionState| {
             info!("[WebRTC] PeerConnection state changed: {:?}", state);
-            Box::pin(async {})
+            let pc = Arc::clone(&pc_state_clone);
+            let tx = close_tx.clone();
+            Box::pin(async move {
+                match state {
+                    RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed => {
+                        info!("[WebRTC] PeerConnection entered {:?} state -> closing and notifying session cleanup", state);
+                        let _ = pc.close().await;
+                        let _ = tx.send(()).await;
+                    }
+                    RTCPeerConnectionState::Disconnected => {
+                        info!("[WebRTC] PeerConnection entered Disconnected state; monitoring 3s before closing");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                        let current = pc.connection_state();
+                        if current == RTCPeerConnectionState::Disconnected
+                            || current == RTCPeerConnectionState::Failed
+                            || current == RTCPeerConnectionState::Closed
+                        {
+                            info!("[WebRTC] PeerConnection remained in {:?} state -> closing and cleaning up slot", current);
+                            let _ = pc.close().await;
+                            let _ = tx.send(()).await;
+                        }
+                    }
+                    _ => {}
+                }
+            })
         }));
 
         // 11. Handle DataChannel for zero HOL-blocking input & control
